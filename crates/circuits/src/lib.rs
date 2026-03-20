@@ -6,6 +6,7 @@ pub mod context;
 pub mod extract_bits;
 pub mod ivalue;
 pub mod ops;
+pub mod poseidon2;
 pub mod simd;
 pub mod stats;
 pub mod test_utils;
