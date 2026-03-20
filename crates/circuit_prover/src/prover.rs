@@ -21,7 +21,9 @@ use stwo::core::air::Component;
 use stwo::core::channel::Blake2sM31Channel;
 use stwo::core::channel::Channel;
 use stwo::core::fields::qm31::QM31;
+use stwo::core::pcs::CommitmentSchemeVerifier;
 use stwo::core::pcs::PcsConfig;
+use stwo::core::pcs::TreeVec;
 use stwo::core::poly::circle::CanonicCoset;
 use stwo::core::proof::ExtendedStarkProof;
 use stwo::core::proof_of_work::GrindOps;
@@ -36,6 +38,7 @@ pub use stwo::prover::mempool::BaseColumnPool;
 use stwo::prover::poly::circle::PolyOps;
 use stwo::prover::poly::twiddles::TwiddleTree;
 use stwo::prover::{ProvingError, prove_ex};
+use stwo::prover::backend::Column;
 
 const COMPOSITION_POLYNOMIAL_LOG_DEGREE_BOUND: u32 = 1;
 
@@ -52,6 +55,10 @@ pub struct CircuitProof {
 #[cfg(test)]
 #[path = "prover_test.rs"]
 pub mod test;
+
+#[cfg(test)]
+#[path = "recursive_circuits_tests.rs"]
+pub mod recursive_circuits_tests;
 
 pub fn to_component_provers(
     components: &CircuitComponents,
@@ -264,4 +271,62 @@ pub fn preprare_circuit_proof_for_circuit_verifier(
         channel_salt,
     );
     (proof, public_data)
+}
+
+
+pub fn verify_stwo_proof(preprocessed_circuit: &PreprocessedCircuit, circuit_proof: CircuitProof) {
+    let CircuitProof {
+        pcs_config,
+        claim,
+        interaction_pow_nonce,
+        interaction_claim,
+        components,
+        stark_proof,
+        channel_salt,
+    } = circuit_proof;
+    assert!(stark_proof.is_ok());
+    let proof = stark_proof.unwrap();
+
+    let verifier_channel = &mut Blake2sM31Channel::default();
+    verifier_channel.mix_felts(&[channel_salt.into()]);
+    pcs_config.mix_into(verifier_channel);
+    let commitment_scheme =
+        &mut CommitmentSchemeVerifier::<Blake2sM31MerkleChannel>::new(pcs_config);
+
+    // Retrieve the expected column sizes in each commitment interaction, from the AIR.
+    let sizes = TreeVec::concat_cols(components.iter().map(|c| c.trace_log_degree_bounds()));
+
+    commitment_scheme.commit(
+        proof.proof.commitments[0],
+        &preprocessed_circuit.preprocessed_trace.log_sizes(),
+        verifier_channel,
+    );
+    claim.mix_into(verifier_channel);
+    println!("Claim: {claim:?}");
+    commitment_scheme.commit(proof.proof.commitments[1], &sizes[1], verifier_channel);
+    verifier_channel.verify_pow_nonce(INTERACTION_POW_BITS, interaction_pow_nonce);
+    verifier_channel.mix_u64(interaction_pow_nonce);
+    let interaction_elements = CircuitInteractionElements::draw(verifier_channel);
+    interaction_claim.mix_into(verifier_channel);
+    commitment_scheme.commit(proof.proof.commitments[2], &sizes[2], verifier_channel);
+
+    stwo::core::verifier::verify_ex(
+        &components.iter().map(|c| c.as_ref()).collect::<Vec<&dyn Component>>(),
+        verifier_channel,
+        commitment_scheme,
+        proof.proof,
+        true,
+    )
+    .unwrap();
+
+    assert_eq!(
+        lookup_sum(
+            &claim,
+            &interaction_claim,
+            &interaction_elements,
+            &preprocessed_circuit.params.output_addresses,
+            preprocessed_circuit.params.n_blake_gates
+        ),
+        QM31::zero()
+    );
 }
