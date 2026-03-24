@@ -133,6 +133,10 @@ pub fn poseidon2_hash_two<Value: IValue>(ctx: &mut Context<Value>, a: Var, b: Va
         apply_external_round_matrix(ctx, &mut state);
     }
 
+    for lane in &state[1..] {
+        ctx.mark_as_maybe_unused(lane);
+    }
+
     state[0]
 }
 
