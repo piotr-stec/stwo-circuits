@@ -1,4 +1,4 @@
-use crate::prover::preprare_circuit_proof_for_circuit_verifier;
+use crate::prover::{CircuitProofKeccak, preprare_circuit_proof_for_circuit_verifier, preprare_circuit_proof_for_circuit_verifier_keccak, prove_circuit_assignment_keccak};
 use crate::prover::{BaseColumnPool, CircuitProof, SimdBackend, prove_circuit_assignment};
 use circuit_air::CircuitInteractionElements;
 use circuit_air::lookup_sum;
@@ -6,7 +6,7 @@ use circuit_air::statement::{INTERACTION_POW_BITS, all_circuit_components};
 use circuit_air::verify::{CircuitConfig, verify_circuit};
 use circuit_common::finalize::finalize_context;
 use circuit_common::preprocessed::PreprocessedCircuit;
-use circuits::blake::blake;
+use circuits::blake::{HashValue, blake};
 use circuits::context::Var;
 use circuits::eval;
 use circuits::ivalue::{IValue, qm31_from_u32s};
@@ -16,11 +16,12 @@ use circuits_stark_verifier::proof::ProofConfig;
 use expect_test::expect;
 use num_traits::{One, Zero};
 use stwo::core::air::Component;
-use stwo::core::channel::Blake2sM31Channel;
+use stwo::core::channel::{Blake2sM31Channel, KeccakChannel};
 use stwo::core::channel::Channel;
 use stwo::core::fields::qm31::QM31;
 use stwo::core::pcs::{CommitmentSchemeVerifier, TreeVec};
 use stwo::core::vcs_lifted::blake2_merkle::Blake2sM31MerkleChannel;
+use stwo::core::vcs_lifted::keccak_merkle::KeccakMerkleChannel;
 
 // Not a power of 2 so that we can test component padding.
 const N: usize = 1030;
@@ -276,6 +277,73 @@ fn test_prove_and_stark_verify_fibonacci_context() {
         QM31::zero()
     );
 }
+
+#[test]
+fn test_prove_and_stark_verify_fibonacci_context_keccak_channel() {
+    let mut fibonacci_context = build_fibonacci_context();
+    fibonacci_context.finalize_guessed_vars();
+    fibonacci_context.validate_circuit();
+
+    let preprocessed_circuit = PreprocessedCircuit::preprocess_circuit(&mut fibonacci_context);
+
+    let CircuitProofKeccak {
+        pcs_config,
+        claim,
+        interaction_pow_nonce,
+        interaction_claim,
+        components,
+        stark_proof,
+        channel_salt,
+    } = prove_circuit_assignment_keccak(
+        fibonacci_context.values(),
+        &preprocessed_circuit,
+        &BaseColumnPool::<SimdBackend>::new(),
+    );
+    assert!(stark_proof.is_ok());
+    let proof = stark_proof.unwrap();
+    // Verify.
+    let verifier_channel = &mut KeccakChannel::default();
+    verifier_channel.mix_felts(&[channel_salt.into()]);
+    pcs_config.mix_into(verifier_channel);
+    let commitment_scheme =
+        &mut CommitmentSchemeVerifier::<KeccakMerkleChannel>::new(pcs_config);
+    // Retrieve the expected column sizes in each commitment interaction, from the AIR.
+    let sizes = TreeVec::concat_cols(components.iter().map(|c| c.trace_log_degree_bounds()));
+
+    commitment_scheme.commit(
+        proof.proof.commitments[0],
+        &preprocessed_circuit.preprocessed_trace.log_sizes(),
+        verifier_channel,
+    );
+    claim.mix_into(verifier_channel);
+    commitment_scheme.commit(proof.proof.commitments[1], &sizes[1], verifier_channel);
+    verifier_channel.verify_pow_nonce(INTERACTION_POW_BITS, interaction_pow_nonce);
+    verifier_channel.mix_u64(interaction_pow_nonce);
+    let interaction_elements = CircuitInteractionElements::draw(verifier_channel);
+    interaction_claim.mix_into(verifier_channel);
+    commitment_scheme.commit(proof.proof.commitments[2], &sizes[2], verifier_channel);
+
+    stwo::core::verifier::verify_ex(
+        &components.iter().map(|c| c.as_ref()).collect::<Vec<&dyn Component>>(),
+        verifier_channel,
+        commitment_scheme,
+        proof.proof,
+        true,
+    )
+    .unwrap();
+
+    assert_eq!(
+        lookup_sum(
+            &claim,
+            &interaction_claim,
+            &interaction_elements,
+            &preprocessed_circuit.params.output_addresses,
+            preprocessed_circuit.params.n_blake_gates
+        ),
+        QM31::zero()
+    );
+}
+
 
 const FIBONACCI_CIRCUIT_PREPROCESSED_ROOT: [u32; 8] =
     [1799162176, 335565964, 91003826, 962817318, 881310192, 1530884903, 192868928, 56339769];

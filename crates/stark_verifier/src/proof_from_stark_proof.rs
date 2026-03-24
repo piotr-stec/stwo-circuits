@@ -8,7 +8,11 @@ use num_traits::Zero;
 use stwo::core::fields::m31::M31;
 use stwo::core::fields::qm31::QM31;
 use stwo::core::proof::ExtendedStarkProof;
+use stwo::core::vcs::blake2_hash::Blake2sHash;
+use stwo::core::vcs::keccak_hash::KeccakHash;
+use stwo::core::vcs::keccak_hash::KeccakHasher;
 use stwo::core::vcs_lifted::blake2_merkle::Blake2sM31MerkleHasher;
+use stwo::core::vcs_lifted::merkle_hasher::MerkleHasherLifted;
 use stwo::core::vcs_lifted::verifier::LOG_PACKED_LEAF_SIZE;
 
 use crate::fri_proof::FriWitness;
@@ -17,6 +21,7 @@ use crate::fri_proof::{FriCommitProof, FriProof};
 use crate::merkle::{AuthPath, AuthPaths};
 use crate::oods::EvalDomainSamples;
 use crate::proof::{Claim, InteractionAtOods, N_TRACES, Proof, ProofConfig};
+use circuits::blake::HashValue;
 use circuits::ivalue::qm31_from_u32s;
 
 /// Constructs [Proof] with the values from the given proof ([ExtendedStarkProof]).
@@ -44,10 +49,10 @@ pub fn proof_from_stark_proof(
     );
 
     Proof {
-        preprocessed_root: commitments[0].into(),
-        trace_root: commitments[1].into(),
-        interaction_root: commitments[2].into(),
-        composition_polynomial_root: commitments[3].into(),
+        preprocessed_root: hash_to_hash_value(&commitments[0]),
+        trace_root: hash_to_hash_value(&commitments[1]),
+        interaction_root: hash_to_hash_value(&commitments[2]),
+        composition_polynomial_root: hash_to_hash_value(&commitments[3]),
         preprocessed_columns_at_oods: as_single_row(&sampled_values[0]),
         trace_at_oods: as_single_row(&sampled_values[1]),
         interaction_at_oods: sampled_values[2]
@@ -65,8 +70,75 @@ pub fn proof_from_stark_proof(
         fri: FriProof {
             commit: FriCommitProof {
                 layer_commitments: chain!(
-                    [fri_proof.first_layer.commitment.into()],
-                    fri_proof.inner_layers.iter().map(|layer| layer.commitment.into()),
+                    [hash_to_hash_value(&fri_proof.first_layer.commitment)],
+                    fri_proof
+                        .inner_layers
+                        .iter()
+                        .map(|layer| hash_to_hash_value(&layer.commitment)),
+                )
+                .collect(),
+                last_layer_coefs: (*fri_proof.last_layer_poly).to_vec(),
+            },
+            auth_paths: construct_fri_auth_paths(proof, config, &all_fold_steps),
+            witness: construct_fri_witness(proof, &all_fold_steps),
+        },
+        proof_of_work_nonce: qm31_from_u32s(pow_low, pow_high, 0, 0),
+        interaction_pow_nonce: qm31_from_u32s(interaction_pow_low, interaction_pow_high, 0, 0),
+        channel_salt: qm31_from_u32s(channel_salt, 0, 0, 0),
+    }
+}
+
+/// Constructs [Proof] with the values from the given proof ([ExtendedStarkProof]).
+pub fn proof_from_stark_proof_keccak_channel(
+    proof: &ExtendedStarkProof<KeccakHasher>,
+    config: &ProofConfig,
+    claim: Claim<QM31>,
+    interaction_pow_nonce: u64,
+    channel_salt: u32,
+) -> Proof<QM31> {
+    let commitments = &proof.proof.commitments;
+    let sampled_values = &proof.proof.sampled_values;
+    let fri_proof = &proof.proof.fri_proof;
+
+    let pow: u64 = proof.proof.proof_of_work;
+    let pow_high = (pow >> 32) as u32;
+    let pow_low = (pow & 0xFFFFFFFF) as u32;
+
+    let interaction_pow_high = (interaction_pow_nonce >> 32) as u32;
+    let interaction_pow_low = (interaction_pow_nonce & 0xFFFFFFFF) as u32;
+
+    let all_fold_steps = compute_all_fold_steps(
+        config.fri.log_trace_size - config.fri.log_n_last_layer_coefs,
+        config.fri.fold_step,
+    );
+
+    Proof {
+        preprocessed_root: hash_to_hash_value(&commitments[0]),
+        trace_root: hash_to_hash_value(&commitments[1]),
+        interaction_root: hash_to_hash_value(&commitments[2]),
+        composition_polynomial_root: hash_to_hash_value(&commitments[3]),
+        preprocessed_columns_at_oods: as_single_row(&sampled_values[0]),
+        trace_at_oods: as_single_row(&sampled_values[1]),
+        interaction_at_oods: sampled_values[2]
+            .iter()
+            .map(|x| match x[..] {
+                [at_prev, at_oods] => InteractionAtOods { at_oods, at_prev: Some(at_prev) },
+                [at_oods] => InteractionAtOods { at_oods, at_prev: None },
+                _ => panic!("Unexpected interaction at OODS values"),
+            })
+            .collect_vec(),
+        claim,
+        composition_eval_at_oods: as_single_row(&sampled_values[3]).try_into().unwrap(),
+        eval_domain_samples: construct_eval_domain_samples(proof, config),
+        eval_domain_auth_paths: construct_eval_domain_auth_paths(proof, config),
+        fri: FriProof {
+            commit: FriCommitProof {
+                layer_commitments: chain!(
+                    [hash_to_hash_value(&fri_proof.first_layer.commitment)],
+                    fri_proof
+                        .inner_layers
+                        .iter()
+                        .map(|layer| hash_to_hash_value(&layer.commitment)),
                 )
                 .collect(),
                 last_layer_coefs: (*fri_proof.last_layer_poly).to_vec(),
@@ -91,11 +163,31 @@ fn as_single_row(values: &[Vec<QM31>]) -> Vec<QM31> {
         .collect_vec()
 }
 
+fn hash_to_hash_value(hash: &impl AsRef<[u8]>) -> HashValue<QM31> {
+    let bytes = hash.as_ref();
+    debug_assert_eq!(bytes.len(), 32);
+
+    let mut limbs = [0u32; 8];
+    for (i, chunk) in bytes.chunks_exact(4).enumerate() {
+        limbs[i] = M31::reduce(u32::from_le_bytes(chunk.try_into().unwrap()).into()).0;
+    }
+
+    HashValue::from(limbs)
+}
+
+#[allow(dead_code)]
+fn _assert_hash_types_supported() {
+    fn _assert<T: AsRef<[u8]>>() {}
+    _assert::<Blake2sHash>();
+    _assert::<KeccakHash>();
+}
+
 /// Constructs [EvalDomainSamples] with the values from the given proof ([ExtendedStarkProof]).
-fn construct_eval_domain_samples(
-    proof: &ExtendedStarkProof<Blake2sM31MerkleHasher>,
-    config: &ProofConfig,
-) -> EvalDomainSamples<QM31> {
+fn construct_eval_domain_samples<H>(proof: &ExtendedStarkProof<H>, config: &ProofConfig) -> EvalDomainSamples<QM31>
+where
+    H: MerkleHasherLifted,
+    H::Hash: AsRef<[u8]>,
+{
     let unsorted_query_locations = &proof.aux.unsorted_query_locations;
     let queried_values = &proof.proof.queried_values;
 
@@ -132,10 +224,11 @@ fn construct_eval_domain_samples(
 
 /// Constructs [AuthPaths] for the evaluation domain queries (the in-domain queries) with the values
 /// from the given proof ([ExtendedStarkProof]).
-fn construct_eval_domain_auth_paths(
-    proof: &ExtendedStarkProof<Blake2sM31MerkleHasher>,
-    config: &ProofConfig,
-) -> AuthPaths<QM31> {
+fn construct_eval_domain_auth_paths<H>(proof: &ExtendedStarkProof<H>, config: &ProofConfig) -> AuthPaths<QM31>
+where
+    H: MerkleHasherLifted,
+    H::Hash: AsRef<[u8]>,
+{
     let unsorted_query_locations = &proof.aux.unsorted_query_locations;
     let res = proof
         .aux
@@ -149,7 +242,7 @@ fn construct_eval_domain_auth_paths(
                     let mut pos = *query_idx;
                     for j in 0..config.log_evaluation_domain_size() {
                         let hash = merkle_decommitment_aux.all_node_values[j][&(pos ^ 1)];
-                        auth_path.0.push(hash.into());
+                        auth_path.0.push(hash_to_hash_value(&hash));
                         pos >>= 1;
                     }
                     auth_path
@@ -163,11 +256,15 @@ fn construct_eval_domain_auth_paths(
 
 /// Constructs [AuthPaths] for the FRI trees with the values from the given proof
 /// ([ExtendedStarkProof]).
-fn construct_fri_auth_paths(
-    proof: &ExtendedStarkProof<Blake2sM31MerkleHasher>,
+fn construct_fri_auth_paths<H>(
+    proof: &ExtendedStarkProof<H>,
     config: &ProofConfig,
     all_fold_steps: &[usize],
-) -> AuthPaths<QM31> {
+) -> AuthPaths<QM31>
+where
+    H: MerkleHasherLifted,
+    H::Hash: AsRef<[u8]>,
+{
     let unsorted_query_locations = &proof.aux.unsorted_query_locations;
     let layers = chain!([&proof.aux.fri.first_layer], &proof.aux.fri.inner_layers);
     let mut log_layer_size = config.log_evaluation_domain_size();
@@ -187,7 +284,7 @@ fn construct_fri_auth_paths(
                     for j in *step..log_layer_size {
                         let hash =
                             layer_proof.decommitment.all_node_values[j - pack_shift][&(pos ^ 1)];
-                        auth_path.0.push(hash.into());
+                        auth_path.0.push(hash_to_hash_value(&hash));
                         pos >>= 1;
                     }
                     auth_path
@@ -209,10 +306,11 @@ fn construct_fri_auth_paths(
 ///   circle-to-line fold is hardcoded to 1, so there is exactly one sibling per query.
 /// - the second member contains, for each inner layer, for each query, the coset witness for that
 ///   query.
-pub fn construct_fri_witness(
-    proof: &ExtendedStarkProof<Blake2sM31MerkleHasher>,
-    all_fold_steps: &[usize],
-) -> FriWitness<QM31> {
+pub fn construct_fri_witness<H>(proof: &ExtendedStarkProof<H>, all_fold_steps: &[usize]) -> FriWitness<QM31>
+where
+    H: MerkleHasherLifted,
+    H::Hash: AsRef<[u8]>,
+{
     let all_layers: Vec<_> = chain![
         std::slice::from_ref(&proof.aux.fri.first_layer),
         proof.aux.fri.inner_layers.iter(),

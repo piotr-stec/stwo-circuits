@@ -1,4 +1,4 @@
-use crate::prover::{BaseColumnPool, CircuitProof, SimdBackend, prove_circuit_assignment, verify_stwo_proof};
+use crate::prover::{BaseColumnPool, CircuitProof, CircuitProofKeccak, SimdBackend, prove_circuit_assignment, prove_circuit_assignment_keccak, verify_stwo_proof, verify_stwo_proof_keccak};
 use circuit_air::statement::all_circuit_components;
 use circuit_common::preprocessed::PreprocessedCircuit;
 use circuits::blake::{HashValue, blake, blake_qm31};
@@ -35,6 +35,12 @@ struct ProofBundle {
     preprocessed: PreprocessedCircuit,
     preprocessed_root: HashValue<QM31>,
     proof: CircuitProof,
+}
+
+struct ProofBundleKeccak {
+    preprocessed: PreprocessedCircuit,
+    preprocessed_root: HashValue<QM31>,
+    proof: CircuitProofKeccak,
 }
 
 fn root_from_u32s(words: [u32; 8]) -> HashValue<QM31> {
@@ -310,6 +316,19 @@ fn make_bundle(mut context: Context<QM31>) -> ProofBundle {
     );
     let preprocessed_root = compute_preprocessed_root(&preprocessed, &proof.pcs_config);
     ProofBundle { preprocessed, preprocessed_root, proof }
+}
+
+fn make_bundle_keccak(mut context: Context<QM31>) -> ProofBundleKeccak {
+    context.finalize_guessed_vars();
+    context.validate_circuit();
+    let preprocessed = PreprocessedCircuit::preprocess_circuit(&mut context);
+    let proof = prove_circuit_assignment_keccak(
+        context.values(),
+        &preprocessed,
+        &BaseColumnPool::<SimdBackend>::new(),
+    );
+    let preprocessed_root = compute_preprocessed_root(&preprocessed, &proof.pcs_config);
+    ProofBundleKeccak { preprocessed, preprocessed_root, proof }
 }
 
 #[test]
@@ -630,7 +649,7 @@ fn test_recursive_two_deposits() {
         proof_deposit_d.proof,
     );
 
-    let recursive_abcd_bundle = make_bundle(recursive_context_abcd);
+    let recursive_abcd_bundle = make_bundle_keccak(recursive_context_abcd);
     println!(
         "recursive_abcd preprocessed root: {:?}",
         recursive_abcd_bundle.preprocessed_root
@@ -651,5 +670,5 @@ fn test_recursive_two_deposits() {
         recursive_abcd_bundle.preprocessed_root
     );
 
-    verify_stwo_proof(&recursive_abcd_bundle.preprocessed, recursive_abcd_bundle.proof);
+    verify_stwo_proof_keccak(&recursive_abcd_bundle.preprocessed, recursive_abcd_bundle.proof);
 }

@@ -33,22 +33,20 @@ serde = "1.0.219"
 serde_json = "1.0"
 
 # stwo
-stwo = { git = "https://github.com/starkware-libs/stwo", rev = "aeceb74c", features = [
+stwo = { path = "../stwo/crates/stwo", features = [
     "parallel",
 ], default-features = false }
-stwo-constraint-framework = { git = "https://github.com/starkware-libs/stwo", rev = "aeceb74c", features = [
+stwo-constraint-framework = { path = "../stwo/crates/constraint-framework", features = [
     "parallel",
 ] }
-stwo-air-utils-derive = { git = "https://github.com/starkware-libs/stwo", rev = "aeceb74c" }
-stwo-air-utils = { git = "https://github.com/starkware-libs/stwo", rev = "aeceb74c" }
-
+stwo-air-utils-derive = { path = "../stwo/crates/air-utils-derive" }
+stwo-air-utils = { path = "../stwo/crates/air-utils"}
 # stwo-cairo
-cairo-air = { git = "https://github.com/starkware-libs/stwo-cairo", rev = "467d5c6d" }
-stwo_cairo_prover = { package = "stwo-cairo-prover", git = "https://github.com/starkware-libs/stwo-cairo", rev = "467d5c6d" }
-stwo_cairo_common = { package = "stwo-cairo-common", git = "https://github.com/starkware-libs/stwo-cairo", rev = "467d5c6d" }
-stwo_cairo_dev_utils = { package = "stwo-cairo-dev-utils", git = "https://github.com/starkware-libs/stwo-cairo", rev = "467d5c6d" }
-stwo_cairo_utils = { package = "stwo-cairo-utils", git = "https://github.com/starkware-libs/stwo-cairo", rev = "467d5c6d" }
-
+cairo-air = { path = "../stwo-cairo/stwo_cairo_prover/crates/cairo-air" }
+stwo_cairo_prover = { package = "stwo-cairo-prover", path = "../stwo-cairo/stwo_cairo_prover/crates/prover" }
+stwo_cairo_common = {package = "stwo-cairo-common", path = "../stwo-cairo/stwo_cairo_prover/crates/common" }
+stwo_cairo_dev_utils = { package = "stwo-cairo-dev-utils", path = "../stwo-cairo/stwo_cairo_prover/crates/dev_utils" }
+stwo_cairo_utils = { package = "stwo-cairo-utils", path = "../stwo-cairo/stwo_cairo_prover/crates/utils" }
 # local crates
 circuits = { path = "crates/circuits" }
 circuit-air = { path = "crates/circuit_air" }
