@@ -41,6 +41,7 @@ stwo-constraint-framework = { path = "../stwo/crates/constraint-framework", feat
 ] }
 stwo-air-utils-derive = { path = "../stwo/crates/air-utils-derive" }
 stwo-air-utils = { path = "../stwo/crates/air-utils"}
+stwo-polynomial = { path = "../stwo-polynomial" }
 # stwo-cairo
 cairo-air = { path = "../stwo-cairo/stwo_cairo_prover/crates/cairo-air" }
 stwo_cairo_prover = { package = "stwo-cairo-prover", path = "../stwo-cairo/stwo_cairo_prover/crates/prover" }

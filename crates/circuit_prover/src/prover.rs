@@ -44,9 +44,13 @@ use stwo::prover::backend::CpuBackend;
 pub use stwo::prover::backend::simd::SimdBackend;
 pub use stwo::prover::mempool::BaseColumnPool;
 use stwo::prover::poly::circle::PolyOps;
+use stwo::prover::poly::circle::SecureCirclePoly;
 use stwo::prover::poly::twiddles::TwiddleTree;
 use stwo::prover::{ProvingError, prove_ex};
 use stwo::prover::backend::Column;
+use stwo_polynomial::prove::prove;
+use stwo_polynomial::verify::verify;
+use stwo::prover::backend::simd::SimdBackend as SimdBackendForPolynomial;
 
 const COMPOSITION_POLYNOMIAL_LOG_DEGREE_BOUND: u32 = 1;
 
@@ -66,7 +70,7 @@ pub struct CircuitProofKeccak {
     pub interaction_pow_nonce: u64,
     pub interaction_claim: CircuitInteractionClaim,
     pub components: Vec<Box<dyn Component>>,
-    pub stark_proof: Result<ExtendedStarkProof<KeccakMerkleHasher>, ProvingError>,
+    pub stark_proof: Result<(ExtendedStarkProof<KeccakMerkleHasher>, SecureCirclePoly<SimdBackendForPolynomial>), ProvingError>,
     pub channel_salt: u32,
 }
 
@@ -163,8 +167,21 @@ pub fn prove_circuit_assignment_keccak(
     preprocessed_circuit: &PreprocessedCircuit,
     base_column_pool: &BaseColumnPool<SimdBackend>,
 ) -> CircuitProofKeccak {
+    prove_circuit_assignment_keccak_with_config(
+        values,
+        preprocessed_circuit,
+        base_column_pool,
+        PcsConfig::default(),
+    )
+}
+
+pub fn prove_circuit_assignment_keccak_with_config(
+    values: &[QM31],
+    preprocessed_circuit: &PreprocessedCircuit,
+    base_column_pool: &BaseColumnPool<SimdBackend>,
+    mut pcs_config: PcsConfig,
+) -> CircuitProofKeccak {
     let trace_log_size = preprocessed_circuit.params.trace_log_size;
-    let mut pcs_config = PcsConfig::default();
     let lifting_log_size = trace_log_size + pcs_config.fri_config.log_blowup_factor;
     pcs_config.lifting_log_size = Some(lifting_log_size);
 
@@ -389,7 +406,7 @@ pub fn prove_circuit_with_precompute_keccak<'a>(
     let components = to_component_provers(&circuit_components);
 
     // Prove stark.
-    let proof = prove_ex::<SimdBackend, _>(&components, channel, commitment_scheme, true);
+    let proof = prove::<SimdBackend, _>(&components, channel, commitment_scheme, true);
     CircuitProofKeccak {
         pcs_config,
         claim,
@@ -464,7 +481,7 @@ pub fn preprare_circuit_proof_for_circuit_verifier_keccak(
     };
 
     let proof = proof_from_stark_proof_keccak_channel(
-        &stark_proof,
+        &stark_proof.0,
         proof_config,
         claim,
         interaction_pow_nonce,
@@ -543,7 +560,7 @@ pub fn verify_stwo_proof_keccak(preprocessed_circuit: &PreprocessedCircuit, circ
         channel_salt,
     } = circuit_proof;
     assert!(stark_proof.is_ok());
-    let proof = stark_proof.unwrap();
+    let proof = stark_proof.unwrap().0;
 
     let verifier_channel = &mut KeccakChannel::default();
     verifier_channel.mix_felts(&[channel_salt.into()]);
@@ -573,6 +590,66 @@ pub fn verify_stwo_proof_keccak(preprocessed_circuit: &PreprocessedCircuit, circ
         verifier_channel,
         commitment_scheme,
         proof.proof,
+        true,
+    )
+    .unwrap();
+
+    assert_eq!(
+        lookup_sum(
+            &claim,
+            &interaction_claim,
+            &interaction_elements,
+            &preprocessed_circuit.params.output_addresses,
+            preprocessed_circuit.params.n_blake_gates
+        ),
+        QM31::zero()
+    );
+}
+
+pub fn verify_stwo_proof_keccak_polynomial(preprocessed_circuit: &PreprocessedCircuit, circuit_proof: CircuitProofKeccak) {
+    let CircuitProofKeccak {
+        pcs_config,
+        claim,
+        interaction_pow_nonce,
+        interaction_claim,
+        components,
+        stark_proof,
+        channel_salt,
+    } = circuit_proof;
+    assert!(stark_proof.is_ok());
+    let stark_proof = stark_proof.unwrap();
+    let proof = stark_proof.0;
+    let composition_polynomial = stark_proof.1;
+
+    let verifier_channel = &mut KeccakChannel::default();
+    verifier_channel.mix_felts(&[channel_salt.into()]);
+    pcs_config.mix_into(verifier_channel);
+    let commitment_scheme =
+        &mut CommitmentSchemeVerifier::<KeccakMerkleChannel>::new(pcs_config);
+
+    // Retrieve the expected column sizes in each commitment interaction, from the AIR.
+    let sizes = TreeVec::concat_cols(components.iter().map(|c| c.trace_log_degree_bounds()));
+
+    commitment_scheme.commit(
+        proof.proof.commitments[0],
+        &preprocessed_circuit.preprocessed_trace.log_sizes(),
+        verifier_channel,
+    );
+    claim.mix_into(verifier_channel);
+    println!("Claim: {claim:?}");
+    commitment_scheme.commit(proof.proof.commitments[1], &sizes[1], verifier_channel);
+    verifier_channel.verify_pow_nonce(INTERACTION_POW_BITS, interaction_pow_nonce);
+    verifier_channel.mix_u64(interaction_pow_nonce);
+    let interaction_elements = CircuitInteractionElements::draw(verifier_channel);
+    interaction_claim.mix_into(verifier_channel);
+    commitment_scheme.commit(proof.proof.commitments[2], &sizes[2], verifier_channel);
+
+    verify(
+        &components.iter().map(|c| c.as_ref()).collect::<Vec<&dyn Component>>(),
+        verifier_channel,
+        commitment_scheme,
+        proof.proof,
+        &composition_polynomial,
         true,
     )
     .unwrap();
