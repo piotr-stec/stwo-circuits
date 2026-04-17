@@ -1384,8 +1384,35 @@ dependencies = [
  "starknet-ff",
  "starknet-types-core",
  "stwo",
- "stwo-cairo-common",
- "stwo-cairo-serialize",
+ "stwo-cairo-common 1.1.0",
+ "stwo-cairo-serialize 1.1.0",
+ "stwo-constraint-framework",
+ "thiserror 2.0.18",
+ "tracing",
+]
+
+[[package]]
+name = "cairo-air"
+version = "1.1.0"
+source = "git+https://github.com/piotr-stec/stwo-cairo?branch=stwo-dependency#d9052c66dd117c8cca53222a705a7c32ddbdf155"
+dependencies = [
+ "bincode 1.3.3",
+ "bzip2",
+ "clap",
+ "itertools 0.12.1",
+ "log",
+ "num-traits",
+ "paste",
+ "rayon",
+ "serde",
+ "serde_json",
+ "sonic-rs",
+ "starknet-curve 0.6.0",
+ "starknet-ff",
+ "starknet-types-core",
+ "stwo",
+ "stwo-cairo-common 1.1.0 (git+https://github.com/piotr-stec/stwo-cairo?branch=stwo-dependency)",
+ "stwo-cairo-serialize 1.1.0 (git+https://github.com/piotr-stec/stwo-cairo?branch=stwo-dependency)",
  "stwo-constraint-framework",
  "thiserror 2.0.18",
  "tracing",
@@ -2044,7 +2071,7 @@ dependencies = [
  "rstest",
  "serde",
  "stwo",
- "stwo-cairo-common",
+ "stwo-cairo-common 1.1.0",
  "stwo-constraint-framework",
 ]
 
@@ -2052,7 +2079,7 @@ dependencies = [
 name = "circuit-cairo-air"
 version = "0.1.0"
 dependencies = [
- "cairo-air",
+ "cairo-air 1.1.0 (git+https://github.com/piotr-stec/stwo-cairo?branch=stwo-dependency)",
  "circuit-air",
  "circuit-common",
  "circuit-prover",
@@ -2063,7 +2090,7 @@ dependencies = [
  "num-traits",
  "serde_json",
  "stwo",
- "stwo-cairo-common",
+ "stwo-cairo-common 1.1.0",
  "stwo-cairo-dev-utils",
  "stwo-cairo-prover",
  "stwo-cairo-utils",
@@ -2079,7 +2106,7 @@ dependencies = [
  "itertools 0.12.1",
  "rand_chacha 0.3.1",
  "stwo",
- "stwo-cairo-common",
+ "stwo-cairo-common 1.1.0",
  "stwo-constraint-framework",
 ]
 
@@ -2088,7 +2115,7 @@ name = "circuit-prover"
 version = "0.1.0"
 dependencies = [
  "alloy",
- "cairo-air",
+ "cairo-air 1.1.0 (git+https://github.com/piotr-stec/stwo-cairo?branch=stwo-dependency)",
  "circuit-air",
  "circuit-common",
  "circuit-serialize",
@@ -2102,7 +2129,7 @@ dependencies = [
  "stwo",
  "stwo-air-utils",
  "stwo-air-utils-derive",
- "stwo-cairo-common",
+ "stwo-cairo-common 1.1.0",
  "stwo-cairo-prover",
  "stwo-constraint-framework",
  "stwo-polynomial",
@@ -5398,6 +5425,7 @@ dependencies = [
 [[package]]
 name = "stwo"
 version = "2.1.0"
+source = "git+https://github.com/piotr-stec/stwo?branch=keccak-latest#477fd5756673e5f6687473be9de3927b2ab7de33"
 dependencies = [
  "blake2",
  "blake3",
@@ -5406,7 +5434,7 @@ dependencies = [
  "dashmap",
  "educe 0.5.11",
  "fnv",
- "hashbrown 0.16.1",
+ "hashbrown 0.15.5",
  "hex",
  "indexmap",
  "itertools 0.12.1",
@@ -5426,6 +5454,7 @@ dependencies = [
 [[package]]
 name = "stwo-air-utils"
 version = "2.1.0"
+source = "git+https://github.com/piotr-stec/stwo?branch=keccak-latest#477fd5756673e5f6687473be9de3927b2ab7de33"
 dependencies = [
  "bytemuck",
  "itertools 0.12.1",
@@ -5437,6 +5466,7 @@ dependencies = [
 [[package]]
 name = "stwo-air-utils-derive"
 version = "2.1.0"
+source = "git+https://github.com/piotr-stec/stwo?branch=keccak-latest#477fd5756673e5f6687473be9de3927b2ab7de33"
 dependencies = [
  "itertools 0.13.0",
  "proc-macro2",
@@ -5463,7 +5493,7 @@ dependencies = [
  "serde",
  "serde_json",
  "stwo",
- "stwo-cairo-common",
+ "stwo-cairo-common 1.1.0",
  "thiserror 2.0.18",
  "tracing",
 ]
@@ -5482,7 +5512,26 @@ dependencies = [
  "starknet-ff",
  "starknet-types-core",
  "stwo",
- "stwo-cairo-serialize",
+ "stwo-cairo-serialize 1.1.0",
+ "stwo-constraint-framework",
+]
+
+[[package]]
+name = "stwo-cairo-common"
+version = "1.1.0"
+source = "git+https://github.com/piotr-stec/stwo-cairo?branch=stwo-dependency#d9052c66dd117c8cca53222a705a7c32ddbdf155"
+dependencies = [
+ "bytemuck",
+ "itertools 0.12.1",
+ "rayon",
+ "ruint",
+ "serde",
+ "serde_arrays",
+ "starknet-curve 0.6.0",
+ "starknet-ff",
+ "starknet-types-core",
+ "stwo",
+ "stwo-cairo-serialize 1.1.0 (git+https://github.com/piotr-stec/stwo-cairo?branch=stwo-dependency)",
  "stwo-constraint-framework",
 ]
 
@@ -5492,7 +5541,7 @@ version = "1.1.0"
 dependencies = [
  "anyhow",
  "bincode 1.3.3",
- "cairo-air",
+ "cairo-air 1.1.0",
  "cairo-lang-executable",
  "cairo-lang-runner",
  "cairo-lang-utils",
@@ -5508,7 +5557,7 @@ dependencies = [
  "stwo",
  "stwo-cairo-adapter",
  "stwo-cairo-prover",
- "stwo-cairo-serialize",
+ "stwo-cairo-serialize 1.1.0",
  "thiserror 2.0.18",
  "tracing",
  "tracing-subscriber",
@@ -5520,7 +5569,7 @@ version = "1.1.0"
 dependencies = [
  "anyhow",
  "bytemuck",
- "cairo-air",
+ "cairo-air 1.1.0",
  "dashmap",
  "getrandom 0.2.17",
  "getrandom 0.3.4",
@@ -5540,8 +5589,8 @@ dependencies = [
  "stwo-air-utils",
  "stwo-air-utils-derive",
  "stwo-cairo-adapter",
- "stwo-cairo-common",
- "stwo-cairo-serialize",
+ "stwo-cairo-common 1.1.0",
+ "stwo-cairo-serialize 1.1.0",
  "stwo-constraint-framework",
  "tracing",
 ]
@@ -5552,12 +5601,31 @@ version = "1.1.0"
 dependencies = [
  "starknet-ff",
  "stwo",
- "stwo-cairo-serialize-derive",
+ "stwo-cairo-serialize-derive 1.1.0",
+]
+
+[[package]]
+name = "stwo-cairo-serialize"
+version = "1.1.0"
+source = "git+https://github.com/piotr-stec/stwo-cairo?branch=stwo-dependency#d9052c66dd117c8cca53222a705a7c32ddbdf155"
+dependencies = [
+ "starknet-ff",
+ "stwo",
+ "stwo-cairo-serialize-derive 1.1.0 (git+https://github.com/piotr-stec/stwo-cairo?branch=stwo-dependency)",
 ]
 
 [[package]]
 name = "stwo-cairo-serialize-derive"
 version = "1.1.0"
+dependencies = [
+ "quote",
+ "syn 2.0.117",
+]
+
+[[package]]
+name = "stwo-cairo-serialize-derive"
+version = "1.1.0"
+source = "git+https://github.com/piotr-stec/stwo-cairo?branch=stwo-dependency#d9052c66dd117c8cca53222a705a7c32ddbdf155"
 dependencies = [
  "quote",
  "syn 2.0.117",
@@ -5576,8 +5644,9 @@ dependencies = [
 [[package]]
 name = "stwo-constraint-framework"
 version = "2.1.0"
+source = "git+https://github.com/piotr-stec/stwo?branch=keccak-latest#477fd5756673e5f6687473be9de3927b2ab7de33"
 dependencies = [
- "hashbrown 0.16.1",
+ "hashbrown 0.15.5",
  "itertools 0.12.1",
  "num-traits",
  "rand 0.8.5",
@@ -5590,6 +5659,7 @@ dependencies = [
 [[package]]
 name = "stwo-polynomial"
 version = "0.1.0"
+source = "git+https://github.com/piotr-stec/stwo-polynomial?branch=latest-stwo#4b357cba42654caaf8a09ee72d679d64aef51217"
 dependencies = [
  "alloy",
  "itertools 0.13.0",
