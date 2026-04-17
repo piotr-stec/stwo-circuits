@@ -14,3 +14,4 @@ pub mod utils;
 pub mod wrappers;
 pub mod merkle_membership;
 pub mod balance_commitment;
+pub mod attestation;

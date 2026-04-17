@@ -1,5 +1,6 @@
 use crate::prover::preprare_circuit_proof_for_circuit_verifier;
-use crate::prover::{BaseColumnPool, CircuitProof, SimdBackend, prove_circuit_assignment};
+use crate::prover::{BaseColumnPool, CircuitProof, SimdBackend, prove_circuit_assignment, verify_stwo_proof};
+use circuits::attestation::{attestation_bytes, build_attestation_circuit, compute_attestation_commitment, pad_attestation_blake_rows};
 use circuit_air::CircuitInteractionElements;
 use circuit_air::lookup_sum;
 use circuit_air::statement::{INTERACTION_POW_BITS, all_circuit_components};
@@ -10,7 +11,7 @@ use circuits::blake::blake;
 use circuits::context::Var;
 use circuits::eval;
 use circuits::ivalue::{IValue, qm31_from_u32s};
-use circuits::ops::{output, permute};
+use circuits::ops::{eq, output, permute};
 use circuits::{context::Context, ops::guess};
 use circuits_stark_verifier::proof::ProofConfig;
 use expect_test::expect;
@@ -52,6 +53,39 @@ pub fn build_permutation_context() -> Context<QM31> {
     let _outputs = permute(&mut context, &outputs, IValue::sort_by_u_coordinate);
 
     context
+}
+
+pub fn build_two_plus_two_context() -> Context<QM31> {
+    let mut context = Context::<QM31>::default();
+
+    let a = guess(&mut context, qm31_from_u32s(2, 0, 0, 0));
+    let b = guess(&mut context, qm31_from_u32s(2, 0, 0, 0));
+    let sum = eval!(&mut context, (a) + (b));
+
+    // Constrain that sum == 4.
+    let four = context.constant(qm31_from_u32s(4, 0, 0, 0));
+    eq(&mut context, sum, four);
+
+    output(&mut context, sum);
+
+    context
+}
+
+#[test]
+fn test_prove_two_plus_two() {
+    let mut context = build_two_plus_two_context();
+    context.finalize_guessed_vars();
+    context.validate_circuit();
+
+    let preprocessed_circuit = PreprocessedCircuit::preprocess_circuit(&mut context);
+    let circuit_proof = prove_circuit_assignment(
+        context.values(),
+        &preprocessed_circuit,
+        &BaseColumnPool::<SimdBackend>::new(),
+    );
+
+    assert!(circuit_proof.stark_proof.is_ok(), "Got error: {}", circuit_proof.stark_proof.err().unwrap());
+    verify_stwo_proof(&preprocessed_circuit, circuit_proof);
 }
 
 pub fn build_blake_gate_context() -> Context<QM31> {
@@ -142,6 +176,45 @@ fn test_prove_and_stark_verify_blake_gate_context() {
             preprocessed_circuit.params.n_blake_gates
         ),
         QM31::zero()
+    );
+}
+
+#[test]
+fn test_prove_and_stark_verify_attestation_context() {
+    let attestation = attestation_bytes(1, 3, 25);
+    let blinder = [1u8, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
+    let commitment = compute_attestation_commitment(&attestation, &blinder);
+    let mut context = build_attestation_circuit(&attestation, &blinder, commitment, 1, 3, 25);
+    pad_attestation_blake_rows(&mut context);
+    context.validate_circuit();
+
+    let preprocessed_circuit = PreprocessedCircuit::preprocess_circuit(&mut context);
+    let circuit_proof = prove_circuit_assignment(
+        context.values(),
+        &preprocessed_circuit,
+        &BaseColumnPool::<SimdBackend>::new(),
+    );
+
+    assert!(circuit_proof.stark_proof.is_ok(), "Got error: {}", circuit_proof.stark_proof.err().unwrap());
+    verify_stwo_proof(&preprocessed_circuit, circuit_proof);
+}
+
+#[test]
+#[should_panic(expected = "assertion failed: !self.packed_inputs.is_empty()")]
+fn test_prove_attestation_without_blake_padding_panics() {
+    let attestation = attestation_bytes(1, 3, 25);
+    let blinder = [1u8, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
+    let commitment = compute_attestation_commitment(&attestation, &blinder);
+    let mut context = build_attestation_circuit(&attestation, &blinder, commitment, 1, 3, 25);
+    // NO padding — try to prove without Blake
+    context.validate_circuit();
+
+    let preprocessed_circuit = PreprocessedCircuit::preprocess_circuit(&mut context);
+    // This will PANIC in witness generation
+    let _circuit_proof = prove_circuit_assignment(
+        context.values(),
+        &preprocessed_circuit,
+        &BaseColumnPool::<SimdBackend>::new(),
     );
 }
 
