@@ -44,10 +44,10 @@ stwo-air-utils = { git = "https://github.com/piotr-stec/stwo", branch = "keccak-
 stwo-polynomial = { git = "https://github.com/piotr-stec/stwo-polynomial", branch = "latest-stwo" }
 # stwo-cairo
 cairo-air = { git = "https://github.com/piotr-stec/stwo-cairo", branch = "stwo-dependency" }
-stwo_cairo_prover = { package = "stwo-cairo-prover", path = "../stwo-cairo/stwo_cairo_prover/crates/prover" }
-stwo_cairo_common = {package = "stwo-cairo-common", path = "../stwo-cairo/stwo_cairo_prover/crates/common" }
-stwo_cairo_dev_utils = { package = "stwo-cairo-dev-utils", path = "../stwo-cairo/stwo_cairo_prover/crates/dev_utils" }
-stwo_cairo_utils = { package = "stwo-cairo-utils", path = "../stwo-cairo/stwo_cairo_prover/crates/utils" }
+stwo_cairo_prover = { package = "stwo-cairo-prover",  git = "https://github.com/piotr-stec/stwo-cairo", branch = "stwo-dependency"  }
+stwo_cairo_common = {package = "stwo-cairo-common",  git = "https://github.com/piotr-stec/stwo-cairo", branch = "stwo-dependency"  }
+stwo_cairo_dev_utils = { package = "stwo-cairo-dev-utils",  git = "https://github.com/piotr-stec/stwo-cairo", branch = "stwo-dependency"  }
+stwo_cairo_utils = { package = "stwo-cairo-utils",  git = "https://github.com/piotr-stec/stwo-cairo", branch = "stwo-dependency"  }
 # local crates
 circuits = { path = "crates/circuits" }
 circuit-air = { path = "crates/circuit_air" }
