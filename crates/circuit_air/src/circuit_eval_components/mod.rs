@@ -3,6 +3,7 @@ pub mod blake_gate;
 pub mod blake_output;
 pub mod blake_round;
 pub mod blake_round_sigma;
+pub mod poseidon_gate;
 pub mod prelude;
 pub mod range_check_15;
 pub mod range_check_16;

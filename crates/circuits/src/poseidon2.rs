@@ -1,3 +1,6 @@
+use stwo::core::fields::m31::M31;
+
+use crate::circuit::Poseidon;
 use crate::context::{Context, Var};
 use crate::eval;
 use crate::ivalue::{IValue, qm31_from_u32s};
@@ -134,6 +137,100 @@ pub fn poseidon2_hash_two<Value: IValue>(ctx: &mut Context<Value>, a: Var, b: Va
     }
 
     state[0]
+}
+
+// --- Pure M31 value computation (no circuit gates) ---
+
+fn pow5_m31(x: M31) -> M31 {
+    let x2 = x * x;
+    let x4 = x2 * x2;
+    x4 * x
+}
+
+fn apply_m4_m31(state: &mut [M31; N_STATE], base: usize) {
+    let (x0, x1, x2, x3) = (state[base], state[base + 1], state[base + 2], state[base + 3]);
+    let t0 = x0 + x1;
+    let t02 = t0 + t0;
+    let t1 = x2 + x3;
+    let t12 = t1 + t1;
+    let t2 = x1 + x1 + t1;
+    let t3 = x3 + x3 + t0;
+    let t4 = t12 + t12 + t3;
+    let t5 = t02 + t02 + t2;
+    state[base] = t3 + t5;
+    state[base + 1] = t5;
+    state[base + 2] = t2 + t4;
+    state[base + 3] = t4;
+}
+
+fn apply_external_m31(state: &mut [M31; N_STATE]) {
+    for i in 0..4 {
+        apply_m4_m31(state, 4 * i);
+    }
+    for j in 0..4 {
+        let s = state[j] + state[j + 4] + state[j + 8] + state[j + 12];
+        for i in 0..4 {
+            state[4 * i + j] = state[4 * i + j] + s;
+        }
+    }
+}
+
+fn apply_internal_m31(state: &mut [M31; N_STATE]) {
+    let mut sum = state[0];
+    for i in 1..N_STATE {
+        sum = sum + state[i];
+    }
+    for i in 0..N_STATE {
+        state[i] = state[i] * M31::from_u32_unchecked(INTERNAL_DIAG[i]) + sum;
+    }
+}
+
+/// Computes Poseidon2(a, b) over M31 — pure value, no circuit gates.
+pub fn poseidon2_value(a: M31, b: M31) -> M31 {
+    let zero = M31::from_u32_unchecked(0);
+    let mut state = [zero; N_STATE];
+    state[0] = a;
+    state[1] = b;
+
+    apply_external_m31(&mut state);
+
+    for round in 0..N_HALF_FULL_ROUNDS {
+        for i in 0..N_STATE {
+            state[i] = state[i] + M31::from_u32_unchecked(RC_EXTERNAL[round][i]);
+        }
+        for i in 0..N_STATE {
+            state[i] = pow5_m31(state[i]);
+        }
+        apply_external_m31(&mut state);
+    }
+
+    for r in 0..N_PARTIAL_ROUNDS {
+        state[0] = state[0] + M31::from_u32_unchecked(RC_INTERNAL[r]);
+        state[0] = pow5_m31(state[0]);
+        apply_internal_m31(&mut state);
+    }
+
+    for round in 0..N_HALF_FULL_ROUNDS {
+        for i in 0..N_STATE {
+            state[i] = state[i] + M31::from_u32_unchecked(RC_EXTERNAL[round + N_HALF_FULL_ROUNDS][i]);
+        }
+        for i in 0..N_STATE {
+            state[i] = pow5_m31(state[i]);
+        }
+        apply_external_m31(&mut state);
+    }
+
+    state[0]
+}
+
+/// Adds a single Poseidon2 gate to the circuit: out = poseidon2(in0.m31, in1.m31).
+pub fn poseidon_gate<Value: IValue>(ctx: &mut Context<Value>, a: Var, b: Var) -> Var {
+    let a_val = ctx.get(a);
+    let b_val = ctx.get(b);
+    let out_val = Value::poseidon2(a_val, b_val);
+    let out_var = ctx.new_var(out_val);
+    ctx.circuit.poseidon.push(Poseidon { in0: a.idx, in1: b.idx, out: out_var.idx });
+    out_var
 }
 
 #[cfg(test)]

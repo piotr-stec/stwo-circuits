@@ -248,6 +248,38 @@ impl std::fmt::Debug for Permutation {
     }
 }
 
+/// Represents a Poseidon2 hash gate: `[out] = poseidon2([in0].m31, [in1].m31)`.
+/// Only `.0.0` (first M31 coordinate) of in0/in1 is used; out stores result in `.0.0`.
+#[derive(PartialEq, Eq)]
+pub struct Poseidon {
+    pub in0: usize,
+    pub in1: usize,
+    pub out: usize,
+}
+impl Gate for Poseidon {
+    fn check(&self, values: &[QM31]) -> Result<(), String> {
+        use crate::ivalue::qm31_from_u32s;
+        use crate::poseidon2::poseidon2_value;
+        let a = values[self.in0].0.0;
+        let b = values[self.in1].0.0;
+        let expected = poseidon2_value(a, b);
+        check_eq(values[self.out], qm31_from_u32s(expected.0, 0, 0, 0))
+    }
+
+    fn uses(&self) -> Vec<usize> {
+        vec![self.in0, self.in1]
+    }
+
+    fn yields(&self) -> Vec<usize> {
+        vec![self.out]
+    }
+}
+impl std::fmt::Debug for Poseidon {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[{}] = poseidon2([{}], [{}])", self.out, self.in0, self.in1)
+    }
+}
+
 /// Represents a gate that receives an input wire and "marks" it as output.
 #[derive(PartialEq, Eq)]
 pub struct Output {
@@ -283,6 +315,7 @@ pub struct Circuit {
     pub pointwise_mul: Vec<PointwiseMul>,
     pub eq: Vec<Eq>,
     pub blake: Vec<Blake>,
+    pub poseidon: Vec<Poseidon>,
     pub permutation: Vec<Permutation>,
     pub output: Vec<Output>,
 }
@@ -290,7 +323,7 @@ pub struct Circuit {
 impl Circuit {
     /// Returns an iterator over all the gates in the circuit.
     pub fn all_gates(&self) -> impl Iterator<Item = &dyn Gate> {
-        let Circuit { n_vars: _, add, sub, mul, pointwise_mul, eq, blake, permutation, output } =
+        let Circuit { n_vars: _, add, sub, mul, pointwise_mul, eq, blake, poseidon, permutation, output } =
             self;
         chain!(
             add.iter().map(|g| g as &dyn Gate),
@@ -299,6 +332,7 @@ impl Circuit {
             pointwise_mul.iter().map(|g| g as &dyn Gate),
             eq.iter().map(|g| g as &dyn Gate),
             blake.iter().map(|g| g as &dyn Gate),
+            poseidon.iter().map(|g| g as &dyn Gate),
             permutation.iter().map(|g| g as &dyn Gate),
             output.iter().map(|g| g as &dyn Gate),
         )

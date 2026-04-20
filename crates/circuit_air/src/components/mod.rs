@@ -15,6 +15,7 @@ pub mod verify_bitwise_xor_4;
 pub mod verify_bitwise_xor_7;
 pub mod verify_bitwise_xor_8;
 pub mod verify_bitwise_xor_9;
+pub mod poseidon_gate;
 
 use crate::{CircuitClaim, CircuitInteractionClaim, CircuitInteractionElements};
 use stwo::core::air::Component;
@@ -33,6 +34,7 @@ macro_rules! define_component_list {
 define_component_list! {
     Eq,
     Qm31Ops,
+    PoseidonGate,
     BlakeGate,
     BlakeRound,
     BlakeRoundSigma,
@@ -62,6 +64,7 @@ pub struct CircuitComponents {
     pub verify_bitwise_xor_4: verify_bitwise_xor_4::Component,
     pub verify_bitwise_xor_7: verify_bitwise_xor_7::Component,
     pub verify_bitwise_xor_9: verify_bitwise_xor_9::Component,
+    pub poseidon_gate: poseidon_gate::Component,
     pub range_check_15: range_check_15::Component,
     pub range_check_16: range_check_16::Component,
 }
@@ -91,6 +94,16 @@ impl CircuitComponents {
                 common_lookup_elements: interaction_elements.common_lookup_elements.clone(),
             },
             interaction_claim.claimed_sums[ComponentList::Qm31Ops as usize],
+        );
+        let poseidon_gate_component = poseidon_gate::Component::new(
+            tree_span_provider,
+            poseidon_gate::Eval {
+                claim: poseidon_gate::Claim {
+                    log_size: circuit_claim.log_sizes[ComponentList::PoseidonGate as usize],
+                },
+                common_lookup_elements: interaction_elements.common_lookup_elements.clone(),
+            },
+            interaction_claim.claimed_sums[ComponentList::PoseidonGate as usize],
         );
         let blake_gate_component = blake_gate::Component::new(
             tree_span_provider,
@@ -209,6 +222,7 @@ impl CircuitComponents {
         Self {
             eq: eq_component,
             qm31_ops: qm31_ops_component,
+            poseidon_gate: poseidon_gate_component,
             blake_gate: blake_gate_component,
             blake_round: blake_round_component,
             blake_round_sigma: blake_round_sigma_component,
@@ -229,6 +243,7 @@ impl CircuitComponents {
         vec![
             Box::new(self.eq) as Box<dyn Component>,
             Box::new(self.qm31_ops) as Box<dyn Component>,
+            Box::new(self.poseidon_gate) as Box<dyn Component>,
             Box::new(self.blake_gate) as Box<dyn Component>,
             Box::new(self.blake_round) as Box<dyn Component>,
             Box::new(self.blake_round_sigma) as Box<dyn Component>,

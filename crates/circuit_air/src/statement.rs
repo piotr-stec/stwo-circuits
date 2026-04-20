@@ -1,6 +1,6 @@
 use crate::circuit_eval_components::{
-    blake_g, blake_gate, blake_output, blake_round, blake_round_sigma, range_check_15,
-    range_check_16, triple_xor_32, verify_bitwise_xor_4, verify_bitwise_xor_7,
+    blake_g, blake_gate, blake_output, blake_round, blake_round_sigma, poseidon_gate,
+    range_check_15, range_check_16, triple_xor_32, verify_bitwise_xor_4, verify_bitwise_xor_7,
     verify_bitwise_xor_8, verify_bitwise_xor_9, verify_bitwise_xor_12,
 };
 use crate::components::{eq, qm31_ops};
@@ -143,6 +143,7 @@ pub fn all_circuit_components<Value: IValue>() -> Vec<Box<dyn CircuitEval<Value>
     vec![
         Box::new(eq::CircuitEqComponent {}),
         Box::new(qm31_ops::CircuitQm31OpsComponent {}),
+        Box::new(poseidon_gate::Component {}),
         Box::new(blake_gate::Component {}),
         Box::new(blake_round::Component {}),
         Box::new(blake_round_sigma::Component {}),
