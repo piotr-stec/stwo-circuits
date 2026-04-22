@@ -92,11 +92,18 @@ impl FrameworkEval for Eval {
         let out_limb2 = eval.next_trace_mask();
         let out_limb3 = eval.next_trace_mask();
 
-        // Initial Poseidon2 state: [in0, in1, 0, 0, ..., 0]
+        // Initial state layout (Kakarot-compatible for pure M31 inputs):
+        //   [in0.l0, in1.l0, in0.l1, in0.l2, in0.l3, in1.l1, in1.l2, in1.l3, 0, ...]
         let zero = E::F::from(M31::from(0u32));
         let mut state: [E::F; N_STATE] = std::array::from_fn(|i| match i {
             0 => in0_limb0.clone(),
             1 => in1_limb0.clone(),
+            2 => in0_limb1.clone(),
+            3 => in0_limb2.clone(),
+            4 => in0_limb3.clone(),
+            5 => in1_limb1.clone(),
+            6 => in1_limb2.clone(),
+            7 => in1_limb3.clone(),
             _ => zero.clone(),
         });
 

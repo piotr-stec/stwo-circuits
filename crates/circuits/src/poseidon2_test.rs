@@ -1,7 +1,46 @@
+use stwo::core::fields::m31::M31;
+use stwo::core::fields::qm31::QM31;
+
 use crate::context::Context;
 use crate::ivalue::qm31_from_u32s;
 use crate::ops::{Guess, eq, guess};
 use crate::poseidon2::{poseidon2_hash_two, poseidon2_value, poseidon2_value_full, poseidon_gate};
+
+fn run_poseidon_gate(a: u32, b: u32) -> QM31 {
+    let mut ctx = Context::<QM31>::default();
+    let va = qm31_from_u32s(a, 0, 0, 0).guess(&mut ctx);
+    let vb = qm31_from_u32s(b, 0, 0, 0).guess(&mut ctx);
+    let out = poseidon_gate(&mut ctx, va, vb);
+    ctx.get(out)
+}
+
+// Kakarot labs test vectors
+#[test]
+fn test_poseidon_gate_hash_vectors() {
+    // hash(a, b) = state[0] after Poseidon2 with initial state=[a,b,0,...,0]
+    assert_eq!(run_poseidon_gate(0, 0).0.0, M31::from_u32_unchecked(1183174448), "hash(0,0)");
+    assert_eq!(run_poseidon_gate(1, 0).0.0, M31::from_u32_unchecked(846768668),  "hash(1,0)");
+    assert_eq!(run_poseidon_gate(0, 1).0.0, M31::from_u32_unchecked(1854499991), "hash(0,1)");
+    assert_eq!(run_poseidon_gate(1, 2).0.0, M31::from_u32_unchecked(1975699496), "hash(1,2)");
+    assert_eq!(run_poseidon_gate(100, 200).0.0, M31::from_u32_unchecked(844495285), "hash(100,200)");
+    // 2147483647 = p = 0 in M31, so hash(p,p) must equal hash(0,0)
+    assert_eq!(run_poseidon_gate(2147483647, 2147483647).0.0, M31::from_u32_unchecked(1183174448), "hash(p,p)");
+}
+
+#[test]
+fn test_poseidon_gate_qm31_differs_from_m31() {
+    // QM31(5, 0, 0, 0) and QM31(X, 0, 0, 0) — same as Kakarot's hash(5, X)
+    let pure_m31 = run_poseidon_gate(5, 42);
+
+    // QM31(5, 99, 0, 0) — non-zero higher limb → must give different result
+    let mut ctx = Context::<QM31>::default();
+    let va = qm31_from_u32s(5, 99, 0, 0).guess(&mut ctx);
+    let vb = qm31_from_u32s(42, 0, 0, 0).guess(&mut ctx);
+    let out = poseidon_gate(&mut ctx, va, vb);
+    let qm31_result = ctx.get(out);
+
+    assert_ne!(pure_m31, qm31_result, "QM31 with non-zero limbs must differ from pure M31");
+}
 
 #[test]
 fn test_poseidon2_hash_two_7_42() {

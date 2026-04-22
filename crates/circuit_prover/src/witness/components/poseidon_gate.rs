@@ -33,6 +33,12 @@ fn compute_row(in0: [M31; 4], in1: [M31; 4]) -> [M31; N_TRACE_COLUMNS] {
     let mut state = [zero; N_STATE];
     state[0] = in0[0];
     state[1] = in1[0];
+    state[2] = in0[1];
+    state[3] = in0[2];
+    state[4] = in0[3];
+    state[5] = in1[1];
+    state[6] = in1[2];
+    state[7] = in1[3];
 
     apply_external_round_matrix(&mut state);
 

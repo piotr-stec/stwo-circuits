@@ -4,7 +4,7 @@ use stwo::core::fields::qm31::QM31;
 use stwo::core::fields::{cm31::CM31, m31::M31};
 
 use crate::blake::{HashValue, blake_qm31};
-use crate::poseidon2::poseidon2_value_full;
+use crate::poseidon2::poseidon2_value_qm31;
 
 #[cfg(test)]
 #[path = "ivalue_test.rs"]
@@ -79,7 +79,7 @@ impl IValue for QM31 {
     }
 
     fn poseidon2(a: Self, b: Self) -> Self {
-        let [s0, s1, s2, s3] = poseidon2_value_full(a.0.0, b.0.0);
+        let [s0, s1, s2, s3] = poseidon2_value_qm31(a, b);
         qm31_from_u32s(s0.0, s1.0, s2.0, s3.0)
     }
 

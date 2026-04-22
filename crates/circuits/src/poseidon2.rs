@@ -1,4 +1,5 @@
 use stwo::core::fields::m31::M31;
+use stwo::core::fields::qm31::QM31;
 
 use crate::circuit::Poseidon;
 use crate::context::{Context, Var};
@@ -185,14 +186,8 @@ fn apply_internal_m31(state: &mut [M31; N_STATE]) {
     }
 }
 
-/// Computes Poseidon2(a, b) over M31 and returns first 4 state elements as QM31 limbs.
-pub fn poseidon2_value_full(a: M31, b: M31) -> [M31; 4] {
-    let zero = M31::from_u32_unchecked(0);
-    let mut state = [zero; N_STATE];
-    state[0] = a;
-    state[1] = b;
-
-    apply_external_m31(&mut state);
+fn poseidon2_permutation(state: &mut [M31; N_STATE]) {
+    apply_external_m31(state);
 
     for round in 0..N_HALF_FULL_ROUNDS {
         for i in 0..N_STATE {
@@ -201,13 +196,13 @@ pub fn poseidon2_value_full(a: M31, b: M31) -> [M31; 4] {
         for i in 0..N_STATE {
             state[i] = pow5_m31(state[i]);
         }
-        apply_external_m31(&mut state);
+        apply_external_m31(state);
     }
 
     for r in 0..N_PARTIAL_ROUNDS {
         state[0] = state[0] + M31::from_u32_unchecked(RC_INTERNAL[r]);
         state[0] = pow5_m31(state[0]);
-        apply_internal_m31(&mut state);
+        apply_internal_m31(state);
     }
 
     for round in 0..N_HALF_FULL_ROUNDS {
@@ -217,15 +212,43 @@ pub fn poseidon2_value_full(a: M31, b: M31) -> [M31; 4] {
         for i in 0..N_STATE {
             state[i] = pow5_m31(state[i]);
         }
-        apply_external_m31(&mut state);
+        apply_external_m31(state);
     }
+}
 
+/// Computes Poseidon2(a, b) over M31 and returns first 4 state elements.
+/// Compatible with Kakarot: state = [a, b, 0, ..., 0].
+pub fn poseidon2_value_full(a: M31, b: M31) -> [M31; 4] {
+    let zero = M31::from_u32_unchecked(0);
+    let mut state = [zero; N_STATE];
+    state[0] = a;
+    state[1] = b;
+    poseidon2_permutation(&mut state);
     [state[0], state[1], state[2], state[3]]
 }
 
 /// Computes Poseidon2(a, b) over M31 — returns only state[0].
 pub fn poseidon2_value(a: M31, b: M31) -> M31 {
     poseidon2_value_full(a, b)[0]
+}
+
+/// Computes Poseidon2 for two QM31 inputs using all 8 M31 limbs.
+/// State layout preserves Kakarot compatibility for pure M31 inputs:
+///   state = [a.l0, b.l0, a.l1, a.l2, a.l3, b.l1, b.l2, b.l3, 0, ..., 0]
+/// When a.l1==a.l2==a.l3==b.l1==b.l2==b.l3==0, this equals poseidon2_value_full(a.l0, b.l0).
+pub fn poseidon2_value_qm31(a: QM31, b: QM31) -> [M31; 4] {
+    let zero = M31::from_u32_unchecked(0);
+    let mut state = [zero; N_STATE];
+    state[0] = a.0.0;
+    state[1] = b.0.0;
+    state[2] = a.0.1;
+    state[3] = a.1.0;
+    state[4] = a.1.1;
+    state[5] = b.0.1;
+    state[6] = b.1.0;
+    state[7] = b.1.1;
+    poseidon2_permutation(&mut state);
+    [state[0], state[1], state[2], state[3]]
 }
 
 /// Adds a single Poseidon2 gate to the circuit: out = poseidon2(in0.m31, in1.m31).

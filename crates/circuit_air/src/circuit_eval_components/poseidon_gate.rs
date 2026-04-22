@@ -112,6 +112,12 @@ impl<Value: IValue> CircuitEval<Value> for Component {
         let mut state: [Var; N_STATE] = std::array::from_fn(|i| match i {
             0 => in0_l0,
             1 => in1_l0,
+            2 => in0_l1,
+            3 => in0_l2,
+            4 => in0_l3,
+            5 => in1_l1,
+            6 => in1_l2,
+            7 => in1_l3,
             _ => zero,
         });
 
