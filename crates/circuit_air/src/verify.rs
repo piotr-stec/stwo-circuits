@@ -16,7 +16,6 @@ pub struct CircuitPublicData {
 pub struct CircuitConfig {
     pub config: PcsConfig,
     pub output_addresses: Vec<usize>,
-    pub n_blake_gates: usize,
     pub preprocessed_column_ids: Vec<PreProcessedColumnId>,
     pub preprocessed_root: HashValue<QM31>,
 }
@@ -31,7 +30,6 @@ pub fn build_verification_circuit<Value: IValue>(
         &mut context,
         &circuit_config.output_addresses,
         &public_data.output_values,
-        circuit_config.n_blake_gates,
         circuit_config.preprocessed_column_ids.clone(),
         circuit_config.preprocessed_root,
     );

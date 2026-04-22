@@ -3,7 +3,7 @@ use crate::witness::trace::write_interaction_trace;
 use crate::witness::trace::write_interaction_trace_keccak;
 use crate::witness::trace::write_trace;
 use crate::witness::trace::write_trace_keccak;
-use circuit_air::components::CircuitComponents;
+use circuit_air::components::{ComponentList, eq, poseidon_gate, qm31_ops};
 use circuit_air::statement::INTERACTION_POW_BITS;
 use circuit_air::verify::CircuitPublicData;
 use circuit_air::{CircuitClaim, CircuitInteractionClaim, CircuitInteractionElements, lookup_sum};
@@ -11,7 +11,6 @@ use circuit_common::CircuitParams;
 use circuit_common::Qm31OpsTraceGenerator;
 use circuit_common::preprocessed::PreprocessedCircuit;
 use circuits::context::Context;
-use circuits::simd::Simd;
 use circuits_stark_verifier::proof::Proof;
 use circuits_stark_verifier::proof::{Claim, ProofConfig};
 use circuits_stark_verifier::proof_from_stark_proof::proof_from_stark_proof_keccak_channel;
@@ -19,7 +18,6 @@ use circuits_stark_verifier::proof_from_stark_proof::{
     pack_component_log_sizes, pack_enable_bits, proof_from_stark_proof,
 };
 use itertools::Itertools;
-use itertools::chain;
 use num_traits::Zero;
 use stwo::core::air::Component;
 use stwo::core::channel::{Blake2sM31Channel, KeccakChannel};
@@ -36,21 +34,19 @@ use stwo::core::vcs_lifted::blake2_merkle::Blake2sM31MerkleChannel;
 use stwo::core::vcs_lifted::blake2_merkle::Blake2sM31MerkleHasher;
 use stwo::core::vcs_lifted::keccak_merkle::KeccakMerkleChannel;
 use stwo::core::vcs_lifted::keccak_merkle::KeccakMerkleHasher;
-use stwo::core::vcs_lifted::poseidon252_merkle::Poseidon252MerkleHasher;
 use stwo::prover::CommitmentSchemeProver;
 use stwo::prover::CommitmentTreeProver;
 use stwo::prover::ComponentProver;
-use stwo::prover::backend::CpuBackend;
 pub use stwo::prover::backend::simd::SimdBackend;
 pub use stwo::prover::mempool::BaseColumnPool;
 use stwo::prover::poly::circle::PolyOps;
 use stwo::prover::poly::circle::SecureCirclePoly;
 use stwo::prover::poly::twiddles::TwiddleTree;
 use stwo::prover::{ProvingError, prove_ex};
-use stwo::prover::backend::Column;
 use stwo_polynomial::prove::prove;
 use stwo_polynomial::verify::verify;
 use stwo::prover::backend::simd::SimdBackend as SimdBackendForPolynomial;
+use stwo_constraint_framework::TraceLocationAllocator;
 
 const COMPOSITION_POLYNOMIAL_LOG_DEGREE_BOUND: u32 = 1;
 
@@ -81,29 +77,6 @@ pub mod test;
 #[cfg(test)]
 #[path = "recursive_circuits_tests.rs"]
 pub mod recursive_circuits_tests;
-
-pub fn to_component_provers(
-    components: &CircuitComponents,
-) -> Vec<&dyn ComponentProver<SimdBackend>> {
-    chain!([
-        &components.eq as &dyn ComponentProver<SimdBackend>,
-        &components.qm31_ops as &dyn ComponentProver<SimdBackend>,
-        &components.blake_gate as &dyn ComponentProver<SimdBackend>,
-        &components.blake_round as &dyn ComponentProver<SimdBackend>,
-        &components.blake_round_sigma as &dyn ComponentProver<SimdBackend>,
-        &components.blake_g as &dyn ComponentProver<SimdBackend>,
-        &components.blake_output as &dyn ComponentProver<SimdBackend>,
-        &components.triple_xor_32 as &dyn ComponentProver<SimdBackend>,
-        &components.verify_bitwise_xor_8 as &dyn ComponentProver<SimdBackend>,
-        &components.verify_bitwise_xor_12 as &dyn ComponentProver<SimdBackend>,
-        &components.verify_bitwise_xor_4 as &dyn ComponentProver<SimdBackend>,
-        &components.verify_bitwise_xor_7 as &dyn ComponentProver<SimdBackend>,
-        &components.verify_bitwise_xor_9 as &dyn ComponentProver<SimdBackend>,
-        &components.range_check_15 as &dyn ComponentProver<SimdBackend>,
-        &components.range_check_16 as &dyn ComponentProver<SimdBackend>,
-    ])
-    .collect()
-}
 
 pub fn prove_circuit(context: &mut Context<QM31>) -> CircuitProof {
     let preprocessed_circuit = PreprocessedCircuit::preprocess_circuit(context);
@@ -233,7 +206,7 @@ pub fn prove_circuit_with_precompute<'a>(
     pcs_config: PcsConfig,
 ) -> CircuitProof {
     let PreprocessedCircuit { preprocessed_trace, params } = preprocessed_circuit;
-    let CircuitParams { first_permutation_row, n_blake_gates, output_addresses, .. } = params;
+    let CircuitParams { first_permutation_row, output_addresses, .. } = params;
     let trace_generator = TraceGenerator {
         qm31_ops_trace_generator: Qm31OpsTraceGenerator {
             first_permutation_row: *first_permutation_row,
@@ -292,21 +265,47 @@ pub fn prove_circuit_with_precompute<'a>(
             &interaction_claim,
             &interaction_elements,
             output_addresses,
-            *n_blake_gates
         ),
         QM31::zero()
     );
 
     interaction_claim.mix_into(channel);
     tree_builder.commit(channel);
-    // Component provers.
-    let circuit_components = CircuitComponents::new(
-        &claim,
-        &interaction_elements,
-        &interaction_claim,
-        &preprocessed_trace.ids(),
+    // Component provers (poseidon-only path).
+    let preprocessed_column_ids = preprocessed_trace.ids();
+    let tree_span_provider =
+        &mut TraceLocationAllocator::new_with_preprocessed_columns(&preprocessed_column_ids);
+    let eq_component = eq::Component::new(
+        tree_span_provider,
+        eq::Eval {
+            log_size: claim.log_sizes[ComponentList::Eq as usize],
+            common_lookup_elements: interaction_elements.common_lookup_elements.clone(),
+        },
+        interaction_claim.claimed_sums[ComponentList::Eq as usize],
     );
-    let components = to_component_provers(&circuit_components);
+    let qm31_ops_component = qm31_ops::Component::new(
+        tree_span_provider,
+        qm31_ops::Eval {
+            log_size: claim.log_sizes[ComponentList::Qm31Ops as usize],
+            common_lookup_elements: interaction_elements.common_lookup_elements.clone(),
+        },
+        interaction_claim.claimed_sums[ComponentList::Qm31Ops as usize],
+    );
+    let poseidon_gate_component = poseidon_gate::Component::new(
+        tree_span_provider,
+        poseidon_gate::Eval {
+            claim: poseidon_gate::Claim {
+                log_size: claim.log_sizes[ComponentList::PoseidonGate as usize],
+            },
+            common_lookup_elements: interaction_elements.common_lookup_elements.clone(),
+        },
+        interaction_claim.claimed_sums[ComponentList::PoseidonGate as usize],
+    );
+    let components: Vec<&dyn ComponentProver<SimdBackend>> = vec![
+        &eq_component as &dyn ComponentProver<SimdBackend>,
+        &qm31_ops_component as &dyn ComponentProver<SimdBackend>,
+        &poseidon_gate_component as &dyn ComponentProver<SimdBackend>,
+    ];
 
     // Prove stark.
     let proof = prove_ex::<SimdBackend, _>(&components, channel, commitment_scheme, true);
@@ -315,7 +314,11 @@ pub fn prove_circuit_with_precompute<'a>(
         claim,
         interaction_pow_nonce,
         interaction_claim,
-        components: circuit_components.components(),
+        components: vec![
+            Box::new(eq_component) as Box<dyn Component>,
+            Box::new(qm31_ops_component) as Box<dyn Component>,
+            Box::new(poseidon_gate_component) as Box<dyn Component>,
+        ],
         stark_proof: proof,
         channel_salt,
     }
@@ -330,7 +333,7 @@ pub fn prove_circuit_with_precompute_keccak<'a>(
     pcs_config: PcsConfig,
 ) -> CircuitProofKeccak {
     let PreprocessedCircuit { preprocessed_trace, params } = preprocessed_circuit;
-    let CircuitParams { first_permutation_row, n_blake_gates, output_addresses, .. } = params;
+    let CircuitParams { first_permutation_row, output_addresses, .. } = params;
     let trace_generator = TraceGenerator {
         qm31_ops_trace_generator: Qm31OpsTraceGenerator {
             first_permutation_row: *first_permutation_row,
@@ -389,21 +392,47 @@ pub fn prove_circuit_with_precompute_keccak<'a>(
             &interaction_claim,
             &interaction_elements,
             output_addresses,
-            *n_blake_gates
         ),
         QM31::zero()
     );
 
     interaction_claim.mix_into(channel);
     tree_builder.commit(channel);
-    // Component provers.
-    let circuit_components = CircuitComponents::new(
-        &claim,
-        &interaction_elements,
-        &interaction_claim,
-        &preprocessed_trace.ids(),
+    // Component provers (poseidon-only path).
+    let preprocessed_column_ids = preprocessed_trace.ids();
+    let tree_span_provider =
+        &mut TraceLocationAllocator::new_with_preprocessed_columns(&preprocessed_column_ids);
+    let eq_component = eq::Component::new(
+        tree_span_provider,
+        eq::Eval {
+            log_size: claim.log_sizes[ComponentList::Eq as usize],
+            common_lookup_elements: interaction_elements.common_lookup_elements.clone(),
+        },
+        interaction_claim.claimed_sums[ComponentList::Eq as usize],
     );
-    let components = to_component_provers(&circuit_components);
+    let qm31_ops_component = qm31_ops::Component::new(
+        tree_span_provider,
+        qm31_ops::Eval {
+            log_size: claim.log_sizes[ComponentList::Qm31Ops as usize],
+            common_lookup_elements: interaction_elements.common_lookup_elements.clone(),
+        },
+        interaction_claim.claimed_sums[ComponentList::Qm31Ops as usize],
+    );
+    let poseidon_gate_component = poseidon_gate::Component::new(
+        tree_span_provider,
+        poseidon_gate::Eval {
+            claim: poseidon_gate::Claim {
+                log_size: claim.log_sizes[ComponentList::PoseidonGate as usize],
+            },
+            common_lookup_elements: interaction_elements.common_lookup_elements.clone(),
+        },
+        interaction_claim.claimed_sums[ComponentList::PoseidonGate as usize],
+    );
+    let components: Vec<&dyn ComponentProver<SimdBackend>> = vec![
+        &eq_component as &dyn ComponentProver<SimdBackend>,
+        &qm31_ops_component as &dyn ComponentProver<SimdBackend>,
+        &poseidon_gate_component as &dyn ComponentProver<SimdBackend>,
+    ];
 
     // Prove stark.
     let proof = prove::<SimdBackend, _>(&components, channel, commitment_scheme, true);
@@ -412,7 +441,11 @@ pub fn prove_circuit_with_precompute_keccak<'a>(
         claim,
         interaction_pow_nonce,
         interaction_claim,
-        components: circuit_components.components(),
+        components: vec![
+            Box::new(eq_component) as Box<dyn Component>,
+            Box::new(qm31_ops_component) as Box<dyn Component>,
+            Box::new(poseidon_gate_component) as Box<dyn Component>,
+        ],
         stark_proof: proof,
         channel_salt,
     }
@@ -543,7 +576,6 @@ pub fn verify_stwo_proof(preprocessed_circuit: &PreprocessedCircuit, circuit_pro
             &interaction_claim,
             &interaction_elements,
             &preprocessed_circuit.params.output_addresses,
-            preprocessed_circuit.params.n_blake_gates
         ),
         QM31::zero()
     );
@@ -600,7 +632,6 @@ pub fn verify_stwo_proof_keccak(preprocessed_circuit: &PreprocessedCircuit, circ
             &interaction_claim,
             &interaction_elements,
             &preprocessed_circuit.params.output_addresses,
-            preprocessed_circuit.params.n_blake_gates
         ),
         QM31::zero()
     );
@@ -660,7 +691,6 @@ pub fn verify_stwo_proof_keccak_polynomial(preprocessed_circuit: &PreprocessedCi
             &interaction_claim,
             &interaction_elements,
             &preprocessed_circuit.params.output_addresses,
-            preprocessed_circuit.params.n_blake_gates
         ),
         QM31::zero()
     );

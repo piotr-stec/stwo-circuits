@@ -259,11 +259,11 @@ pub struct Poseidon {
 impl Gate for Poseidon {
     fn check(&self, values: &[QM31]) -> Result<(), String> {
         use crate::ivalue::qm31_from_u32s;
-        use crate::poseidon2::poseidon2_value;
+        use crate::poseidon2::poseidon2_value_full;
         let a = values[self.in0].0.0;
         let b = values[self.in1].0.0;
-        let expected = poseidon2_value(a, b);
-        check_eq(values[self.out], qm31_from_u32s(expected.0, 0, 0, 0))
+        let [s0, s1, s2, s3] = poseidon2_value_full(a, b);
+        check_eq(values[self.out], qm31_from_u32s(s0.0, s1.0, s2.0, s3.0))
     }
 
     fn uses(&self) -> Vec<usize> {

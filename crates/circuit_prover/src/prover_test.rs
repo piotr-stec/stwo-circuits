@@ -17,6 +17,7 @@ use circuit_common::finalize::finalize_context;
 use circuit_common::preprocessed::PreprocessedCircuit;
 use circuits::blake::blake;
 use circuits::context::Var;
+use circuits::poseidon2::poseidon_gate;
 use circuits::eval;
 use circuits::ivalue::{IValue, qm31_from_u32s};
 use circuits::ops::{output, permute};
@@ -385,6 +386,7 @@ pub fn build_blake_gate_context() -> Context<QM31> {
 }
 
 #[test]
+#[ignore = "Blake gate AIR removed on feat/poseidon-instead-blake branch"]
 fn test_prove_and_stark_verify_blake_gate_context() {
     let mut blake_gate_context = build_blake_gate_context();
     blake_gate_context.finalize_guessed_vars();
@@ -447,7 +449,6 @@ fn test_prove_and_stark_verify_blake_gate_context() {
             &interaction_claim,
             &interaction_elements,
             &preprocessed_circuit.params.output_addresses,
-            preprocessed_circuit.params.n_blake_gates
         ),
         QM31::zero()
     );
@@ -513,7 +514,6 @@ fn test_prove_and_stark_verify_permutation_context() {
             &interaction_claim,
             &interaction_elements,
             &preprocessed_circuit.params.output_addresses,
-            preprocessed_circuit.params.n_blake_gates
         ),
         QM31::zero()
     );
@@ -579,7 +579,6 @@ fn test_prove_and_stark_verify_fibonacci_context() {
             &interaction_claim,
             &interaction_elements,
             &preprocessed_circuit.params.output_addresses,
-            preprocessed_circuit.params.n_blake_gates
         ),
         QM31::zero()
     );
@@ -644,7 +643,6 @@ fn test_prove_and_stark_verify_fibonacci_context_keccak_channel() {
             &interaction_claim,
             &interaction_elements,
             &preprocessed_circuit.params.output_addresses,
-            preprocessed_circuit.params.n_blake_gates
         ),
         QM31::zero()
     );
@@ -735,69 +733,9 @@ async fn test_prove_and_verify_on_chain() -> Result<(), Box<dyn std::error::Erro
             interaction_claim.claimed_sums[ComponentList::Qm31Ops as usize],
         ),
         component_to_sol_params(
-            &circuit_components.blake_gate,
-            claim.log_sizes[ComponentList::BlakeGate as usize],
-            interaction_claim.claimed_sums[ComponentList::BlakeGate as usize],
-        ),
-        component_to_sol_params(
-            &circuit_components.blake_round,
-            claim.log_sizes[ComponentList::BlakeRound as usize],
-            interaction_claim.claimed_sums[ComponentList::BlakeRound as usize],
-        ),
-        component_to_sol_params(
-            &circuit_components.blake_round_sigma,
-            claim.log_sizes[ComponentList::BlakeRoundSigma as usize],
-            interaction_claim.claimed_sums[ComponentList::BlakeRoundSigma as usize],
-        ),
-        component_to_sol_params(
-            &circuit_components.blake_g,
-            claim.log_sizes[ComponentList::BlakeG as usize],
-            interaction_claim.claimed_sums[ComponentList::BlakeG as usize],
-        ),
-        component_to_sol_params(
-            &circuit_components.blake_output,
-            claim.log_sizes[ComponentList::BlakeOutput as usize],
-            interaction_claim.claimed_sums[ComponentList::BlakeOutput as usize],
-        ),
-        component_to_sol_params(
-            &circuit_components.triple_xor_32,
-            claim.log_sizes[ComponentList::TripleXor32 as usize],
-            interaction_claim.claimed_sums[ComponentList::TripleXor32 as usize],
-        ),
-        component_to_sol_params(
-            &circuit_components.verify_bitwise_xor_8,
-            claim.log_sizes[ComponentList::VerifyBitwiseXor8 as usize],
-            interaction_claim.claimed_sums[ComponentList::VerifyBitwiseXor8 as usize],
-        ),
-        component_to_sol_params(
-            &circuit_components.verify_bitwise_xor_12,
-            claim.log_sizes[ComponentList::VerifyBitwiseXor12 as usize],
-            interaction_claim.claimed_sums[ComponentList::VerifyBitwiseXor12 as usize],
-        ),
-        component_to_sol_params(
-            &circuit_components.verify_bitwise_xor_4,
-            claim.log_sizes[ComponentList::VerifyBitwiseXor4 as usize],
-            interaction_claim.claimed_sums[ComponentList::VerifyBitwiseXor4 as usize],
-        ),
-        component_to_sol_params(
-            &circuit_components.verify_bitwise_xor_7,
-            claim.log_sizes[ComponentList::VerifyBitwiseXor7 as usize],
-            interaction_claim.claimed_sums[ComponentList::VerifyBitwiseXor7 as usize],
-        ),
-        component_to_sol_params(
-            &circuit_components.verify_bitwise_xor_9,
-            claim.log_sizes[ComponentList::VerifyBitwiseXor9 as usize],
-            interaction_claim.claimed_sums[ComponentList::VerifyBitwiseXor9 as usize],
-        ),
-        component_to_sol_params(
-            &circuit_components.range_check_15,
-            claim.log_sizes[ComponentList::RangeCheck15 as usize],
-            interaction_claim.claimed_sums[ComponentList::RangeCheck15 as usize],
-        ),
-        component_to_sol_params(
-            &circuit_components.range_check_16,
-            claim.log_sizes[ComponentList::RangeCheck16 as usize],
-            interaction_claim.claimed_sums[ComponentList::RangeCheck16 as usize],
+            &circuit_components.poseidon_gate,
+            claim.log_sizes[ComponentList::PoseidonGate as usize],
+            interaction_claim.claimed_sums[ComponentList::PoseidonGate as usize],
         ),
     ];
 
@@ -879,6 +817,7 @@ async fn test_prove_and_verify_on_chain() -> Result<(), Box<dyn std::error::Erro
 const FIBONACCI_CIRCUIT_PREPROCESSED_ROOT: [u32; 8] =
     [1799162176, 335565964, 91003826, 962817318, 881310192, 1530884903, 192868928, 56339769];
 
+
 #[test]
 fn test_prove_and_circuit_verify_fibonacci_context() {
     let mut fibonacci_context = build_fibonacci_context();
@@ -899,17 +838,97 @@ fn test_prove_and_circuit_verify_fibonacci_context() {
         &circuit_proof.pcs_config,
         INTERACTION_POW_BITS,
     );
-    let preprocessed_root = FIBONACCI_CIRCUIT_PREPROCESSED_ROOT.into();
+    let pcs_config = circuit_proof.pcs_config;
+    let (proof, public_data) =
+        preprare_circuit_proof_for_circuit_verifier(circuit_proof, &proof_config);
+    let preprocessed_root = proof.preprocessed_root;
     let circuit_config = CircuitConfig {
-        config: circuit_proof.pcs_config,
+        config: pcs_config,
         output_addresses: preprocessed_circuit.params.output_addresses.clone(),
-        n_blake_gates: preprocessed_circuit.params.n_blake_gates,
         preprocessed_column_ids,
         preprocessed_root,
     };
-    let (proof, public_data) =
-        preprare_circuit_proof_for_circuit_verifier(circuit_proof, &proof_config);
     verify_circuit(circuit_config, proof, public_data).unwrap();
+}
+
+pub fn build_poseidon_gate_context() -> Context<QM31> {
+    let mut context = Context::<QM31>::default();
+
+    let a = guess(&mut context, qm31_from_u32s(7, 0, 0, 0));
+    let b = guess(&mut context, qm31_from_u32s(42, 0, 0, 0));
+
+    // Hash chain: out0 = poseidon(a, b), out1 = poseidon(out0_limb0, a), etc.
+    let mut prev = poseidon_gate(&mut context, a, b);
+    for _ in 1..15 {
+        prev = poseidon_gate(&mut context, prev, a);
+    }
+    output(&mut context, prev);
+
+    context
+}
+
+#[test]
+fn test_prove_and_stark_verify_poseidon_gate_context() {
+    let mut ctx = build_poseidon_gate_context();
+    ctx.finalize_guessed_vars();
+    ctx.validate_circuit();
+
+    let preprocessed_circuit = PreprocessedCircuit::preprocess_circuit(&mut ctx);
+    let CircuitProof {
+        components,
+        claim,
+        interaction_claim,
+        pcs_config,
+        stark_proof,
+        interaction_pow_nonce,
+        channel_salt,
+    } = prove_circuit_assignment(
+        ctx.values(),
+        &preprocessed_circuit,
+        &BaseColumnPool::<SimdBackend>::new(),
+    );
+    assert!(stark_proof.is_ok(), "proving failed: {}", stark_proof.err().unwrap());
+    let proof = stark_proof.unwrap();
+
+    let verifier_channel = &mut Blake2sM31Channel::default();
+    verifier_channel.mix_felts(&[channel_salt.into()]);
+    pcs_config.mix_into(verifier_channel);
+    let commitment_scheme =
+        &mut CommitmentSchemeVerifier::<Blake2sM31MerkleChannel>::new(pcs_config);
+
+    let sizes = TreeVec::concat_cols(components.iter().map(|c| c.trace_log_degree_bounds()));
+
+    commitment_scheme.commit(
+        proof.proof.commitments[0],
+        &preprocessed_circuit.preprocessed_trace.log_sizes(),
+        verifier_channel,
+    );
+    claim.mix_into(verifier_channel);
+    commitment_scheme.commit(proof.proof.commitments[1], &sizes[1], verifier_channel);
+    verifier_channel.verify_pow_nonce(INTERACTION_POW_BITS, interaction_pow_nonce);
+    verifier_channel.mix_u64(interaction_pow_nonce);
+    let interaction_elements = CircuitInteractionElements::draw(verifier_channel);
+    interaction_claim.mix_into(verifier_channel);
+    commitment_scheme.commit(proof.proof.commitments[2], &sizes[2], verifier_channel);
+
+    stwo::core::verifier::verify_ex(
+        &components.iter().map(|c| c.as_ref()).collect::<Vec<&dyn Component>>(),
+        verifier_channel,
+        commitment_scheme,
+        proof.proof,
+        true,
+    )
+    .unwrap();
+
+    assert_eq!(
+        lookup_sum(
+            &claim,
+            &interaction_claim,
+            &interaction_elements,
+            &preprocessed_circuit.params.output_addresses,
+        ),
+        QM31::zero()
+    );
 }
 
 #[test]

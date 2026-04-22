@@ -5,11 +5,11 @@ use crate::context::{Context, Var};
 use crate::eval;
 use crate::ivalue::{IValue, qm31_from_u32s};
 
-const N_STATE: usize = 16;
-const N_PARTIAL_ROUNDS: usize = 14;
-const N_HALF_FULL_ROUNDS: usize = 4;
+pub const N_STATE: usize = 16;
+pub const N_PARTIAL_ROUNDS: usize = 14;
+pub const N_HALF_FULL_ROUNDS: usize = 4;
 
-const RC_EXTERNAL: [[u32; N_STATE]; 8] = [
+pub const RC_EXTERNAL: [[u32; N_STATE]; 8] = [
     [0x768bab52, 0x70e0ab7d, 0x3d266c8a, 0x6da42045, 0x600fef22, 0x41dace6b, 0x64f9bdd4, 0x5d42d4fe, 0x76b1516d, 0x6fc9a717, 0x70ac4fb6, 0x00194ef6, 0x22b644e2, 0x1f7916d5, 0x47581be2, 0x2710a123],
     [0x6284e867, 0x018d3afe, 0x5df99ef3, 0x4c1e467b, 0x566f6abc, 0x2994e427, 0x538a6d42, 0x5d7bf2cf, 0x7fda2dab, 0x0fd854c4, 0x46922fca, 0x3d7763a1, 0x19fd05ca, 0x0a4bbb43, 0x15075851, 0x3d903d76],
     [0x2d290ff7, 0x40809fa0, 0x59dac6ec, 0x127927a2, 0x6bbf0ea0, 0x0294140f, 0x24742976, 0x6e84c081, 0x22484f4a, 0x354cae59, 0x0453ffe1, 0x3f47a3cc, 0x0088204e, 0x6066e109, 0x3b7c4b80, 0x6b55665d],
@@ -19,11 +19,11 @@ const RC_EXTERNAL: [[u32; N_STATE]; 8] = [
     [0x5abd1268, 0x4d34a760, 0x12771799, 0x69a0c9ac, 0x39091e55, 0x7f611cd0, 0x3af055da, 0x7ac0bbdf, 0x6e0f3a24, 0x41e3b6f7, 0x49b3756d, 0x568bc538, 0x20c079d8, 0x1701c72c, 0x7670dc6c, 0x5a439035],
     [0x7c93e00e, 0x561fbb4d, 0x1178907b, 0x02737406, 0x32fb24f1, 0x6323b60a, 0x6ab12418, 0x42c99cea, 0x155a0b97, 0x53d1c6aa, 0x2bd20347, 0x279b3d73, 0x4f5f3c70, 0x0245af6c, 0x238359d3, 0x49966a59],
 ];
-const RC_INTERNAL: [u32; N_PARTIAL_ROUNDS] = [
+pub const RC_INTERNAL: [u32; N_PARTIAL_ROUNDS] = [
     0x7f7ec4bf, 0x0421926f, 0x5198e669, 0x34db3148, 0x4368bafd, 0x66685c7f, 0x78d3249a,
     0x60187881, 0x76dad67a, 0x0690b437, 0x1ea95311, 0x40e5369a, 0x38f103fc, 0x1d226a21,
 ];
-const INTERNAL_DIAG: [u32; N_STATE] = [
+pub const INTERNAL_DIAG: [u32; N_STATE] = [
     0x07b80ac4, 0x6bd9cb33, 0x48ee3f9f, 0x4f63dd19, 0x18c546b3, 0x5af89e8b, 0x4ff23de8,
     0x4f78aaf6, 0x53bdc6d4, 0x5c59823e, 0x2a471c72, 0x4c975e79, 0x58dc64d4, 0x06e9315d,
     0x2cf32286, 0x2fb6755d,
@@ -185,8 +185,8 @@ fn apply_internal_m31(state: &mut [M31; N_STATE]) {
     }
 }
 
-/// Computes Poseidon2(a, b) over M31 — pure value, no circuit gates.
-pub fn poseidon2_value(a: M31, b: M31) -> M31 {
+/// Computes Poseidon2(a, b) over M31 and returns first 4 state elements as QM31 limbs.
+pub fn poseidon2_value_full(a: M31, b: M31) -> [M31; 4] {
     let zero = M31::from_u32_unchecked(0);
     let mut state = [zero; N_STATE];
     state[0] = a;
@@ -220,7 +220,12 @@ pub fn poseidon2_value(a: M31, b: M31) -> M31 {
         apply_external_m31(&mut state);
     }
 
-    state[0]
+    [state[0], state[1], state[2], state[3]]
+}
+
+/// Computes Poseidon2(a, b) over M31 — returns only state[0].
+pub fn poseidon2_value(a: M31, b: M31) -> M31 {
+    poseidon2_value_full(a, b)[0]
 }
 
 /// Adds a single Poseidon2 gate to the circuit: out = poseidon2(in0.m31, in1.m31).

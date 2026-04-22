@@ -1,13 +1,13 @@
 pub mod circuit_eval_components;
 pub mod component_utils;
 pub mod components;
+pub mod poseidon;
 pub mod relations;
 pub mod sample_evaluations;
 pub mod statement;
 pub mod verify;
 
 use crate::components::N_COMPONENTS;
-use crate::relations::CommonLookupElements;
 use circuits::ivalue::qm31_from_u32s;
 use circuits_stark_verifier::proof_from_stark_proof::{pack_component_log_sizes, pack_enable_bits};
 use itertools::zip_eq;
@@ -34,8 +34,9 @@ impl CircuitClaim {
         let n_components = log_sizes.len();
         channel.mix_felts(&[qm31_from_u32s(n_components as u32, 0, 0, 0)]);
 
-        // mix the enable bits into the channel.
-        channel.mix_felts(&pack_enable_bits(&[true; N_COMPONENTS]));
+        // Mix enable bits according to active component log sizes.
+        let enable_bits = log_sizes.map(|log_size| log_size > 0);
+        channel.mix_felts(&pack_enable_bits(&enable_bits));
         channel.mix_felts(&pack_component_log_sizes(log_sizes));
         // mix the output values into the channel.
         channel.mix_felts(output_values);
@@ -64,76 +65,11 @@ impl CircuitInteractionClaim {
     }
 }
 
-pub const BLAKE2S_IV: [u32; 8] = [
-    0x6A09E667, 0xBB67AE85, 0x3C6EF372, 0xA54FF53A, 0x510E527F, 0x9B05688C, 0x1F83D9AB, 0x5BE0CD19,
-];
-
-pub fn blake2s_initial_state() -> [u32; 8] {
-    let mut h = BLAKE2S_IV;
-    h[0] ^= 0x01010020;
-    h
-}
-
-fn blake_iv_public_logup_sum(
-    n_blake_gates: usize,
-    common_lookup_elements: &CommonLookupElements,
-) -> QM31 {
-    // Each Blake gate uses the initial state once and creates one row in blake_output.
-    // Then blake_output is padded to a power of two, and each padding row uses the
-    // initial state once. In total we have n_blake_gates.next_power_of_two() uses.
-    let initial_state_uses = n_blake_gates.next_power_of_two();
-
-    let state_id = M31::from(1061955672);
-    let initial_state = blake2s_initial_state();
-    let initial_state_limbs = [
-        M31::from(initial_state[0] & 0xffff),
-        M31::from((initial_state[0] >> 16) & 0xffff),
-        M31::from(initial_state[1] & 0xffff),
-        M31::from((initial_state[1] >> 16) & 0xffff),
-        M31::from(initial_state[2] & 0xffff),
-        M31::from((initial_state[2] >> 16) & 0xffff),
-        M31::from(initial_state[3] & 0xffff),
-        M31::from((initial_state[3] >> 16) & 0xffff),
-        M31::from(initial_state[4] & 0xffff),
-        M31::from((initial_state[4] >> 16) & 0xffff),
-        M31::from(initial_state[5] & 0xffff),
-        M31::from((initial_state[5] >> 16) & 0xffff),
-        M31::from(initial_state[6] & 0xffff),
-        M31::from((initial_state[6] >> 16) & 0xffff),
-        M31::from(initial_state[7] & 0xffff),
-        M31::from((initial_state[7] >> 16) & 0xffff),
-    ];
-
-    let limbs = [
-        state_id,
-        M31::from(0u32),
-        initial_state_limbs[0],
-        initial_state_limbs[1],
-        initial_state_limbs[2],
-        initial_state_limbs[3],
-        initial_state_limbs[4],
-        initial_state_limbs[5],
-        initial_state_limbs[6],
-        initial_state_limbs[7],
-        initial_state_limbs[8],
-        initial_state_limbs[9],
-        initial_state_limbs[10],
-        initial_state_limbs[11],
-        initial_state_limbs[12],
-        initial_state_limbs[13],
-        initial_state_limbs[14],
-        initial_state_limbs[15],
-    ];
-    let denom: QM31 = common_lookup_elements.combine(&limbs);
-    denom.inverse() * M31::from(initial_state_uses)
-}
-
 pub fn lookup_sum(
     claim: &CircuitClaim,
     interaction_claim: &CircuitInteractionClaim,
     interaction_elements: &CircuitInteractionElements,
     output_addresses: &[usize],
-    n_blake_gates: usize,
 ) -> QM31 {
     let CircuitInteractionClaim { claimed_sums } = interaction_claim;
     let component_sum: QM31 = claimed_sums.iter().sum();
@@ -148,9 +84,5 @@ pub fn lookup_sum(
         output_sum += denom.inverse();
     }
 
-    // Subtract the blake IV public logup sum (blake IV state is used but never yielded).
-    let blake_iv_sum =
-        blake_iv_public_logup_sum(n_blake_gates, &interaction_elements.common_lookup_elements);
-
-    component_sum + output_sum - blake_iv_sum
+    component_sum + output_sum
 }
