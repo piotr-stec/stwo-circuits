@@ -4,6 +4,7 @@ use stwo::core::fields::qm31::QM31;
 use stwo::core::fields::{cm31::CM31, m31::M31};
 
 use crate::blake::{HashValue, blake_qm31};
+use crate::poseidon2::poseidon2_value_qm31;
 
 #[cfg(test)]
 #[path = "ivalue_test.rs"]
@@ -45,6 +46,9 @@ pub trait IValue:
 
     fn blake(input: &[Self], n_bytes: usize) -> HashValue<Self>;
 
+    /// Computes poseidon2(a.m31, b.m31) returning result as Self.
+    fn poseidon2(a: Self, b: Self) -> Self;
+
     /// Sorts the input by the u coordinate.
     fn sort_by_u_coordinate(input: &[Self]) -> Vec<Self>;
 }
@@ -74,6 +78,11 @@ impl IValue for QM31 {
         blake_qm31(input, n_bytes)
     }
 
+    fn poseidon2(a: Self, b: Self) -> Self {
+        let [s0, s1, s2, s3] = poseidon2_value_qm31(a, b);
+        qm31_from_u32s(s0.0, s1.0, s2.0, s3.0)
+    }
+
     fn sort_by_u_coordinate(input: &[Self]) -> Vec<Self> {
         input.iter().cloned().sorted_by_key(|val| val.1.0).collect_vec()
     }
@@ -101,6 +110,10 @@ impl IValue for NoValue {
 
     fn blake(_: &[Self], _: usize) -> HashValue<Self> {
         HashValue(Self, Self)
+    }
+
+    fn poseidon2(_: Self, _: Self) -> Self {
+        Self
     }
 
     fn sort_by_u_coordinate(input: &[Self]) -> Vec<Self> {

@@ -18,7 +18,7 @@ edition = "2024"
 [workspace.dependencies]
 blake2 = { version = "0.10.6", default-features = false }
 hashbrown = ">=0.15.2"
-indexmap = { version = "2.10.0", default-features = false }
+indexmap = { version = "2.10.0", default-features = false, features = ["std"] }
 indoc = "2.0.6"
 itertools = { version = "0.12", default-features = false, features = [
     "use_alloc",

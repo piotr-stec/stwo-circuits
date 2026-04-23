@@ -1,20 +1,8 @@
-pub mod blake_g;
-pub mod blake_gate;
-pub mod blake_output;
-pub mod blake_round;
-pub mod blake_round_sigma;
 pub mod eq;
+pub mod poseidon_gate;
 pub mod prelude;
 pub mod qm31_ops;
-pub mod range_check_15;
-pub mod range_check_16;
 pub mod subroutines;
-pub mod triple_xor_32;
-pub mod verify_bitwise_xor_12;
-pub mod verify_bitwise_xor_4;
-pub mod verify_bitwise_xor_7;
-pub mod verify_bitwise_xor_8;
-pub mod verify_bitwise_xor_9;
 
 use crate::{CircuitClaim, CircuitInteractionClaim, CircuitInteractionElements};
 use stwo::core::air::Component;
@@ -33,37 +21,13 @@ macro_rules! define_component_list {
 define_component_list! {
     Eq,
     Qm31Ops,
-    BlakeGate,
-    BlakeRound,
-    BlakeRoundSigma,
-    BlakeG,
-    BlakeOutput,
-    TripleXor32,
-    VerifyBitwiseXor8,
-    VerifyBitwiseXor12,
-    VerifyBitwiseXor4,
-    VerifyBitwiseXor7,
-    VerifyBitwiseXor9,
-    RangeCheck15,
-    RangeCheck16,
+    PoseidonGate,
 }
 
 pub struct CircuitComponents {
     pub eq: eq::Component,
     pub qm31_ops: qm31_ops::Component,
-    pub blake_gate: blake_gate::Component,
-    pub blake_round: blake_round::Component,
-    pub blake_round_sigma: blake_round_sigma::Component,
-    pub blake_g: blake_g::Component,
-    pub blake_output: blake_output::Component,
-    pub triple_xor_32: triple_xor_32::Component,
-    pub verify_bitwise_xor_8: verify_bitwise_xor_8::Component,
-    pub verify_bitwise_xor_12: verify_bitwise_xor_12::Component,
-    pub verify_bitwise_xor_4: verify_bitwise_xor_4::Component,
-    pub verify_bitwise_xor_7: verify_bitwise_xor_7::Component,
-    pub verify_bitwise_xor_9: verify_bitwise_xor_9::Component,
-    pub range_check_15: range_check_15::Component,
-    pub range_check_16: range_check_16::Component,
+    pub poseidon_gate: poseidon_gate::Component,
 }
 impl CircuitComponents {
     pub fn new(
@@ -92,136 +56,20 @@ impl CircuitComponents {
             },
             interaction_claim.claimed_sums[ComponentList::Qm31Ops as usize],
         );
-        let blake_gate_component = blake_gate::Component::new(
+        let poseidon_gate_component = poseidon_gate::Component::new(
             tree_span_provider,
-            blake_gate::Eval {
-                claim: blake_gate::Claim {
-                    log_size: circuit_claim.log_sizes[ComponentList::BlakeGate as usize],
+            poseidon_gate::Eval {
+                claim: poseidon_gate::Claim {
+                    log_size: circuit_claim.log_sizes[ComponentList::PoseidonGate as usize],
                 },
                 common_lookup_elements: interaction_elements.common_lookup_elements.clone(),
             },
-            interaction_claim.claimed_sums[ComponentList::BlakeGate as usize],
-        );
-        let blake_round_component = blake_round::Component::new(
-            tree_span_provider,
-            blake_round::Eval {
-                claim: blake_round::Claim {
-                    log_size: circuit_claim.log_sizes[ComponentList::BlakeRound as usize],
-                },
-                common_lookup_elements: interaction_elements.common_lookup_elements.clone(),
-            },
-            interaction_claim.claimed_sums[ComponentList::BlakeRound as usize],
-        );
-        let blake_round_sigma_component = blake_round_sigma::Component::new(
-            tree_span_provider,
-            blake_round_sigma::Eval {
-                claim: blake_round_sigma::Claim {},
-                common_lookup_elements: interaction_elements.common_lookup_elements.clone(),
-            },
-            interaction_claim.claimed_sums[ComponentList::BlakeRoundSigma as usize],
-        );
-        let blake_g_component = blake_g::Component::new(
-            tree_span_provider,
-            blake_g::Eval {
-                claim: blake_g::Claim {
-                    log_size: circuit_claim.log_sizes[ComponentList::BlakeG as usize],
-                },
-                common_lookup_elements: interaction_elements.common_lookup_elements.clone(),
-            },
-            interaction_claim.claimed_sums[ComponentList::BlakeG as usize],
-        );
-        let blake_output_component = blake_output::Component::new(
-            tree_span_provider,
-            blake_output::Eval {
-                claim: blake_output::Claim {
-                    log_size: circuit_claim.log_sizes[ComponentList::BlakeOutput as usize],
-                },
-                common_lookup_elements: interaction_elements.common_lookup_elements.clone(),
-            },
-            interaction_claim.claimed_sums[ComponentList::BlakeOutput as usize],
-        );
-        let triple_xor_32_component = triple_xor_32::Component::new(
-            tree_span_provider,
-            triple_xor_32::Eval {
-                claim: triple_xor_32::Claim {
-                    log_size: circuit_claim.log_sizes[ComponentList::TripleXor32 as usize],
-                },
-                common_lookup_elements: interaction_elements.common_lookup_elements.clone(),
-            },
-            interaction_claim.claimed_sums[ComponentList::TripleXor32 as usize],
-        );
-        let verify_bitwise_xor_8_component = verify_bitwise_xor_8::Component::new(
-            tree_span_provider,
-            verify_bitwise_xor_8::Eval {
-                claim: verify_bitwise_xor_8::Claim {},
-                common_lookup_elements: interaction_elements.common_lookup_elements.clone(),
-            },
-            interaction_claim.claimed_sums[ComponentList::VerifyBitwiseXor8 as usize],
-        );
-        let verify_bitwise_xor_12_component = verify_bitwise_xor_12::Component::new(
-            tree_span_provider,
-            verify_bitwise_xor_12::Eval {
-                claim: verify_bitwise_xor_12::Claim {},
-                common_lookup_elements: interaction_elements.common_lookup_elements.clone(),
-            },
-            interaction_claim.claimed_sums[ComponentList::VerifyBitwiseXor12 as usize],
-        );
-        let verify_bitwise_xor_4_component = verify_bitwise_xor_4::Component::new(
-            tree_span_provider,
-            verify_bitwise_xor_4::Eval {
-                claim: verify_bitwise_xor_4::Claim {},
-                common_lookup_elements: interaction_elements.common_lookup_elements.clone(),
-            },
-            interaction_claim.claimed_sums[ComponentList::VerifyBitwiseXor4 as usize],
-        );
-        let verify_bitwise_xor_7_component = verify_bitwise_xor_7::Component::new(
-            tree_span_provider,
-            verify_bitwise_xor_7::Eval {
-                claim: verify_bitwise_xor_7::Claim {},
-                common_lookup_elements: interaction_elements.common_lookup_elements.clone(),
-            },
-            interaction_claim.claimed_sums[ComponentList::VerifyBitwiseXor7 as usize],
-        );
-        let verify_bitwise_xor_9_component = verify_bitwise_xor_9::Component::new(
-            tree_span_provider,
-            verify_bitwise_xor_9::Eval {
-                claim: verify_bitwise_xor_9::Claim {},
-                common_lookup_elements: interaction_elements.common_lookup_elements.clone(),
-            },
-            interaction_claim.claimed_sums[ComponentList::VerifyBitwiseXor9 as usize],
-        );
-        let range_check_15_component = range_check_15::Component::new(
-            tree_span_provider,
-            range_check_15::Eval {
-                claim: range_check_15::Claim {},
-                common_lookup_elements: interaction_elements.common_lookup_elements.clone(),
-            },
-            interaction_claim.claimed_sums[ComponentList::RangeCheck15 as usize],
-        );
-        let range_check_16_component = range_check_16::Component::new(
-            tree_span_provider,
-            range_check_16::Eval {
-                claim: range_check_16::Claim {},
-                common_lookup_elements: interaction_elements.common_lookup_elements.clone(),
-            },
-            interaction_claim.claimed_sums[ComponentList::RangeCheck16 as usize],
+            interaction_claim.claimed_sums[ComponentList::PoseidonGate as usize],
         );
         Self {
             eq: eq_component,
             qm31_ops: qm31_ops_component,
-            blake_gate: blake_gate_component,
-            blake_round: blake_round_component,
-            blake_round_sigma: blake_round_sigma_component,
-            blake_g: blake_g_component,
-            blake_output: blake_output_component,
-            triple_xor_32: triple_xor_32_component,
-            verify_bitwise_xor_8: verify_bitwise_xor_8_component,
-            verify_bitwise_xor_12: verify_bitwise_xor_12_component,
-            verify_bitwise_xor_4: verify_bitwise_xor_4_component,
-            verify_bitwise_xor_7: verify_bitwise_xor_7_component,
-            verify_bitwise_xor_9: verify_bitwise_xor_9_component,
-            range_check_15: range_check_15_component,
-            range_check_16: range_check_16_component,
+            poseidon_gate: poseidon_gate_component,
         }
     }
 
@@ -229,19 +77,7 @@ impl CircuitComponents {
         vec![
             Box::new(self.eq) as Box<dyn Component>,
             Box::new(self.qm31_ops) as Box<dyn Component>,
-            Box::new(self.blake_gate) as Box<dyn Component>,
-            Box::new(self.blake_round) as Box<dyn Component>,
-            Box::new(self.blake_round_sigma) as Box<dyn Component>,
-            Box::new(self.blake_g) as Box<dyn Component>,
-            Box::new(self.blake_output) as Box<dyn Component>,
-            Box::new(self.triple_xor_32) as Box<dyn Component>,
-            Box::new(self.verify_bitwise_xor_8) as Box<dyn Component>,
-            Box::new(self.verify_bitwise_xor_12) as Box<dyn Component>,
-            Box::new(self.verify_bitwise_xor_4) as Box<dyn Component>,
-            Box::new(self.verify_bitwise_xor_7) as Box<dyn Component>,
-            Box::new(self.verify_bitwise_xor_9) as Box<dyn Component>,
-            Box::new(self.range_check_15) as Box<dyn Component>,
-            Box::new(self.range_check_16) as Box<dyn Component>,
+            Box::new(self.poseidon_gate) as Box<dyn Component>,
         ]
     }
 }
