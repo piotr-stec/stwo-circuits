@@ -7,6 +7,7 @@ use crate::eval;
 use crate::ivalue::{IValue, qm31_from_u32s};
 
 pub const N_STATE: usize = 16;
+pub const RATE: usize = 8;
 pub const N_PARTIAL_ROUNDS: usize = 14;
 pub const N_HALF_FULL_ROUNDS: usize = 4;
 
@@ -94,18 +95,13 @@ fn apply_internal_round_matrix<Value: IValue>(ctx: &mut Context<Value>, state: &
     }
 }
 
-/// Poseidon2 hash for two field elements (state[0]=a, state[1]=b).
-/// Matches `Poseidon2.sol` parameters for M31.
-pub fn poseidon2_hash_two<Value: IValue>(ctx: &mut Context<Value>, a: Var, b: Var) -> Var {
-    let zero = ctx.zero();
-    let mut state = [zero; 16];
-    state[0] = a;
-    state[1] = b;
-
-    // Initial external round matrix.
+/// Applies the full Poseidon2 permutation to an arbitrary 16-element circuit state.
+pub fn poseidon2_permutation_circuit<Value: IValue>(
+    ctx: &mut Context<Value>,
+    mut state: [Var; N_STATE],
+) -> [Var; N_STATE] {
     apply_external_round_matrix(ctx, &mut state);
 
-    // First half full rounds.
     for round in 0..N_HALF_FULL_ROUNDS {
         for i in 0..N_STATE {
             let rc = ctx.constant(qm31_from_u32s(RC_EXTERNAL[round][i], 0, 0, 0));
@@ -117,7 +113,6 @@ pub fn poseidon2_hash_two<Value: IValue>(ctx: &mut Context<Value>, a: Var, b: Va
         apply_external_round_matrix(ctx, &mut state);
     }
 
-    // Partial rounds.
     for r in 0..N_PARTIAL_ROUNDS {
         let rc = ctx.constant(qm31_from_u32s(RC_INTERNAL[r], 0, 0, 0));
         state[0] = add(ctx, state[0], rc);
@@ -125,7 +120,6 @@ pub fn poseidon2_hash_two<Value: IValue>(ctx: &mut Context<Value>, a: Var, b: Va
         apply_internal_round_matrix(ctx, &mut state);
     }
 
-    // Second half full rounds.
     for round in 0..N_HALF_FULL_ROUNDS {
         for i in 0..N_STATE {
             let rc = ctx.constant(qm31_from_u32s(RC_EXTERNAL[round + N_HALF_FULL_ROUNDS][i], 0, 0, 0));
@@ -137,7 +131,17 @@ pub fn poseidon2_hash_two<Value: IValue>(ctx: &mut Context<Value>, a: Var, b: Va
         apply_external_round_matrix(ctx, &mut state);
     }
 
-    state[0]
+    state
+}
+
+/// Poseidon2 hash for two field elements (state[0]=a, state[1]=b).
+/// Matches `Poseidon2.sol` parameters for M31.
+pub fn poseidon2_hash_two<Value: IValue>(ctx: &mut Context<Value>, a: Var, b: Var) -> Var {
+    let zero = ctx.zero();
+    let mut state = [zero; N_STATE];
+    state[0] = a;
+    state[1] = b;
+    poseidon2_permutation_circuit(ctx, state)[0]
 }
 
 // --- Pure M31 value computation (no circuit gates) ---
@@ -186,6 +190,13 @@ fn apply_internal_m31(state: &mut [M31; N_STATE]) {
     }
 }
 
+/// Runs Poseidon2 permutation on an arbitrary 16-element u32 state and returns all 16 outputs.
+pub fn poseidon2_value_from_state(state: [u32; N_STATE]) -> [u32; N_STATE] {
+    let mut s: [M31; N_STATE] = state.map(M31::from_u32_unchecked);
+    poseidon2_permutation(&mut s);
+    s.map(|x| x.0)
+}
+
 fn poseidon2_permutation(state: &mut [M31; N_STATE]) {
     apply_external_m31(state);
 
@@ -216,22 +227,6 @@ fn poseidon2_permutation(state: &mut [M31; N_STATE]) {
     }
 }
 
-/// Computes Poseidon2(a, b) over M31 and returns first 4 state elements.
-/// Compatible with Kakarot: state = [a, b, 0, ..., 0].
-pub fn poseidon2_value_full(a: M31, b: M31) -> [M31; 4] {
-    let zero = M31::from_u32_unchecked(0);
-    let mut state = [zero; N_STATE];
-    state[0] = a;
-    state[1] = b;
-    poseidon2_permutation(&mut state);
-    [state[0], state[1], state[2], state[3]]
-}
-
-/// Computes Poseidon2(a, b) over M31 — returns only state[0].
-pub fn poseidon2_value(a: M31, b: M31) -> M31 {
-    poseidon2_value_full(a, b)[0]
-}
-
 /// Computes Poseidon2 for two QM31 inputs using all 8 M31 limbs.
 /// State layout preserves Kakarot compatibility for pure M31 inputs:
 ///   state = [a.l0, b.l0, a.l1, a.l2, a.l3, b.l1, b.l2, b.l3, 0, ..., 0]
@@ -249,6 +244,35 @@ pub fn poseidon2_value_qm31(a: QM31, b: QM31) -> [M31; 4] {
     state[7] = b.1.1;
     poseidon2_permutation(&mut state);
     [state[0], state[1], state[2], state[3]]
+}
+
+/// Absorbs one block of RATE M31 values into the sponge state and applies the permutation.
+pub fn poseidon2_absorb_circuit<Value: IValue>(
+    ctx: &mut Context<Value>,
+    mut state: [Var; N_STATE],
+    block: [Var; RATE],
+) -> [Var; N_STATE] {
+    for i in 0..RATE {
+        state[i] = add(ctx, state[i], block[i]);
+    }
+    poseidon2_permutation_circuit(ctx, state)
+}
+
+/// Poseidon2 sponge over a fixed-length sequence of blocks.
+///
+/// Each block is RATE M31 values. The number of blocks is fixed at circuit-build time
+/// (pad with zero blocks to reach the desired maximum). Returns the first 4 state
+/// elements after absorbing all blocks — the digest.
+pub fn poseidon2_sponge_circuit<Value: IValue>(
+    ctx: &mut Context<Value>,
+    blocks: &[[Var; RATE]],
+) -> [Var; N_STATE] {
+    let zero = ctx.zero();
+    let mut state = [zero; N_STATE];
+    for &block in blocks {
+        state = poseidon2_absorb_circuit(ctx, state, block);
+    }
+    state
 }
 
 /// Adds a single Poseidon2 gate to the circuit: out = poseidon2(in0.m31, in1.m31).

@@ -248,8 +248,8 @@ impl std::fmt::Debug for Permutation {
     }
 }
 
-/// Represents a Poseidon2 hash gate: `[out] = poseidon2([in0].m31, [in1].m31)`.
-/// Only `.0.0` (first M31 coordinate) of in0/in1 is used; out stores result in `.0.0`.
+/// Represents a Poseidon2 hash gate: `[out] = poseidon2([in0], [in1])`.
+/// Both inputs are full QM31 values; all 8 M31 limbs feed the permutation state.
 #[derive(PartialEq, Eq)]
 pub struct Poseidon {
     pub in0: usize,
@@ -259,10 +259,8 @@ pub struct Poseidon {
 impl Gate for Poseidon {
     fn check(&self, values: &[QM31]) -> Result<(), String> {
         use crate::ivalue::qm31_from_u32s;
-        use crate::poseidon2::poseidon2_value_full;
-        let a = values[self.in0].0.0;
-        let b = values[self.in1].0.0;
-        let [s0, s1, s2, s3] = poseidon2_value_full(a, b);
+        use crate::poseidon2::poseidon2_value_qm31;
+        let [s0, s1, s2, s3] = poseidon2_value_qm31(values[self.in0], values[self.in1]);
         check_eq(values[self.out], qm31_from_u32s(s0.0, s1.0, s2.0, s3.0))
     }
 
