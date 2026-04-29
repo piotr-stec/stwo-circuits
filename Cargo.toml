@@ -33,29 +33,29 @@ serde = "1.0.219"
 serde_json = "1.0"
 
 # stwo
-stwo = { git = "https://github.com/starkware-libs/stwo", rev = "aeceb74c", features = [
+stwo = { git = "https://github.com/piotr-stec/stwo", branch = "keccak-latest", features = [
     "parallel",
 ], default-features = false }
-stwo-constraint-framework = {  git = "https://github.com/starkware-libs/stwo", rev = "aeceb74c", features = [
+stwo-constraint-framework = { git = "https://github.com/piotr-stec/stwo", branch = "keccak-latest", features = [
     "parallel",
 ] }
-stwo-air-utils-derive = { git = "https://github.com/starkware-libs/stwo", rev = "aeceb74c" }
-stwo-air-utils = { git = "https://github.com/starkware-libs/stwo", rev = "aeceb74c" }
-
+stwo-air-utils-derive = { git = "https://github.com/piotr-stec/stwo", branch = "keccak-latest" }
+stwo-air-utils = { git = "https://github.com/piotr-stec/stwo", branch = "keccak-latest"}
+stwo-polynomial = { git = "https://github.com/piotr-stec/stwo-polynomial", branch = "latest-stwo" }
 # stwo-cairo
-cairo-air = { git = "https://github.com/starkware-libs/stwo-cairo", rev = "467d5c6d" }
-stwo_cairo_prover = { package = "stwo-cairo-prover", git = "https://github.com/starkware-libs/stwo-cairo", rev = "467d5c6d" }
-stwo_cairo_common = { package = "stwo-cairo-common", git = "https://github.com/starkware-libs/stwo-cairo", rev = "467d5c6d" }
-stwo_cairo_dev_utils = { package = "stwo-cairo-dev-utils", git = "https://github.com/starkware-libs/stwo-cairo", rev = "467d5c6d" }
-stwo_cairo_utils = { package = "stwo-cairo-utils", git = "https://github.com/starkware-libs/stwo-cairo", rev = "467d5c6d" }
-
+cairo-air = { git = "https://github.com/piotr-stec/stwo-cairo", branch = "stwo-dependency" }
+stwo_cairo_prover = { package = "stwo-cairo-prover",  git = "https://github.com/piotr-stec/stwo-cairo", branch = "stwo-dependency"  }
+stwo_cairo_common = {package = "stwo-cairo-common",  git = "https://github.com/piotr-stec/stwo-cairo", branch = "stwo-dependency"  }
+stwo_cairo_dev_utils = { package = "stwo-cairo-dev-utils",  git = "https://github.com/piotr-stec/stwo-cairo", branch = "stwo-dependency"  }
+stwo_cairo_utils = { package = "stwo-cairo-utils",  git = "https://github.com/piotr-stec/stwo-cairo", branch = "stwo-dependency"  }
 # local crates
-circuits = { path = "crates/circuits"}
-circuit-air = { path = "crates/circuit_air"}
+circuits = { path = "crates/circuits" }
+circuit-air = { path = "crates/circuit_air" }
 circuit-common = { path = "crates/circuit_common" }
-circuit-prover = { path = "crates/circuit_prover"}
-circuits-stark-verifier = { path = "crates/stark_verifier"}
-circuits-stark-verifier-examples = { path = "crates/stark_verifier_examples"}
+circuit-serialize = { path = "crates/circuit_serialize" }
+circuit-prover = { path = "crates/circuit_prover" }
+circuits-stark-verifier = { path = "crates/stark_verifier" }
+circuits-stark-verifier-examples = { path = "crates/stark_verifier_examples" }
 
 # Compile the circuit-prover and stwo crates with optimization level 3 to speed up the blake related tests.
 [profile.test.package.circuit-prover]
